@@ -61,14 +61,14 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - uses: actions/download-artifact@v4
         with:
           name: juicebox-plus-windows-latest
           path: staging
-
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
