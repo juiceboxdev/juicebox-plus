@@ -1,6 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=juicebox-plus
+Name=Juicebox Plus
+Comment=The companion app to juicebox² !
 Exec=juicebox-plus
 Icon=juicebox-plus
 Categories=Utility;
