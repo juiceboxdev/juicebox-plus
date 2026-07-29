@@ -1,0 +1,7 @@
+Package: juicebox-plus
+Architecture: amd64
+Maintainer: JuiceyDev
+Depends: libgtk-3-0, libappindicator3-1, libdbus-1-3
+Section: utils
+Priority: optional
+Description: System tray application for the Juicepipe high-throughput file ingest daemon
