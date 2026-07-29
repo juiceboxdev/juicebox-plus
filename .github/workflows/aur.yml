@@ -70,7 +70,7 @@ jobs:
           echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > /dev/shm/aur-key
           chmod 600 /dev/shm/aur-key
 
-      - name: Publish juicebox2-plus-bin to AUR
+      - name: Publish juicebox2-plus-git-bin to AUR
         run: |
           version="${GITHUB_REF_NAME#v}"
 
@@ -102,7 +102,7 @@ jobs:
           git config user.email "me@juicey.dev"
           git add -A
           git commit -m "aur update v$version ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
-          git remote add aur ssh://aur@aur.archlinux.org/juicebox2-plus-bin.git
+          git remote add aur ssh://aur@aur.archlinux.org/juicebox2-plus-git-bin.git
           GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git fetch aur master 2>/dev/null || true
           if [ -f .git/FETCH_HEAD ]; then
             git reset --soft FETCH_HEAD
