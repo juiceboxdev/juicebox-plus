@@ -1,0 +1,3 @@
+[submodule "juicepipe"]
+	path = juicepipe
+	url = https://github.com/juiceboxdev/juicepipe.git
