@@ -19,7 +19,7 @@ jobs:
           echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > /dev/shm/aur-key
           chmod 600 /dev/shm/aur-key
 
-      - name: Publish juicebox-plus-git to AUR
+      - name: Publish juicebox2-plus-git to AUR
         run: |
           cd /tmp
           rm -rf aur-push && mkdir aur-push && cd aur-push
@@ -27,7 +27,7 @@ jobs:
           cp "$GITHUB_WORKSPACE/packaging/linux/arch/PKGBUILD" .
 
           cat > .SRCINFO << SRCEND
-pkgbase = juicebox-plus-git
+pkgbase = juicebox2-plus-git
   pkgdesc = The companion app for juicebox!
   pkgver = r0.0000000
   pkgrel = 1
@@ -41,11 +41,11 @@ pkgbase = juicebox-plus-git
   depends = libdbus
   depends = libxdo
   depends = glibc
-  provides = juicebox-plus
-  conflicts = juicebox-plus
+  provides = juicebox2-plus
+  conflicts = juicebox2-plus
   source = git+https://github.com/juiceboxdev/juicebox-plus.git
   md5sums = SKIP
-pkgname = juicebox-plus-git
+pkgname = juicebox2-plus-git
 SRCEND
 
           git init
@@ -53,7 +53,7 @@ SRCEND
           git config user.email "me@juicey.dev"
           git add -A
           git commit -m "aur update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          git remote add aur ssh://aur@aur.archlinux.org/juicebox-plus-git.git
+          git remote add aur ssh://aur@aur.archlinux.org/juicebox2-plus-git.git
           GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git push aur master
 
   deploy-bin:
@@ -68,7 +68,7 @@ SRCEND
           echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > /dev/shm/aur-key
           chmod 600 /dev/shm/aur-key
 
-      - name: Publish juicebox-plus-bin to AUR
+      - name: Publish juicebox2-plus-bin to AUR
         run: |
           version="${GITHUB_REF_NAME#v}"
 
@@ -79,7 +79,7 @@ SRCEND
 # Maintainer: JuiceyDev <me@juicey.dev>
 # Contributor: JuiceyDev <me@juicey.dev>
 
-pkgname=juicebox-plus-bin
+pkgname=juicebox2-plus-bin
 pkgver=$version
 pkgrel=1
 pkgdesc='The companion app for juicebox! (binary release)'
@@ -87,8 +87,8 @@ arch=('x86_64')
 url='https://github.com/juiceboxdev/juicebox-plus'
 license=('LGPL-3.0-or-later')
 depends=('gtk3' 'libappindicator-gtk3' 'libdbus' 'libxdo' 'glibc')
-provides=('juicebox-plus')
-conflicts=('juicebox-plus')
+provides=('juicebox2-plus')
+conflicts=('juicebox2-plus')
 source=(
   "https://github.com/juiceboxdev/juicebox-plus/releases/download/${GITHUB_REF_NAME}/juicebox-plus-linux"
   "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/packaging/linux/juicebox-plus.desktop"
@@ -96,6 +96,11 @@ source=(
   "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/LICENSE"
 )
 md5sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+pkgver() {
+  curl -s https://api.github.com/repos/juiceboxdev/juicebox-plus/releases/latest \
+    | grep '"tag_name":' | sed 's/.*"v//; s/".*//'
+}
 
 package() {
   install -Dm755 "juicebox-plus-linux" "\$pkgdir/usr/bin/juicebox-plus"
@@ -106,7 +111,7 @@ package() {
 PKGEND
 
           cat > .SRCINFO << SRCEND
-pkgbase = juicebox-plus-bin
+pkgbase = juicebox2-plus-bin
   pkgdesc = The companion app for juicebox! (binary release)
   pkgver = $version
   pkgrel = 1
@@ -118,8 +123,8 @@ pkgbase = juicebox-plus-bin
   depends = libdbus
   depends = libxdo
   depends = glibc
-  provides = juicebox-plus
-  conflicts = juicebox-plus
+  provides = juicebox2-plus
+  conflicts = juicebox2-plus
   source = https://github.com/juiceboxdev/juicebox-plus/releases/download/${GITHUB_REF_NAME}/juicebox-plus-linux
   source = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/packaging/linux/juicebox-plus.desktop
   source = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/assets/logo.png
@@ -128,7 +133,7 @@ pkgbase = juicebox-plus-bin
   md5sums = SKIP
   md5sums = SKIP
   md5sums = SKIP
-pkgname = juicebox-plus-bin
+pkgname = juicebox2-plus-bin
 SRCEND
 
           git init
@@ -136,5 +141,5 @@ SRCEND
           git config user.email "me@juicey.dev"
           git add -A
           git commit -m "aur update v$version ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
-          git remote add aur ssh://aur@aur.archlinux.org/juicebox-plus-bin.git
+          git remote add aur ssh://aur@aur.archlinux.org/juicebox2-plus-bin.git
           GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git push aur master
