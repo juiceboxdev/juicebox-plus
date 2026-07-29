@@ -85,6 +85,7 @@ pub fn create_tray_icon(
 
     menu.append(&pause_item).unwrap();
     menu.append(&status_item).unwrap();
+    menu.append(&PredefinedMenuItem::separator()).unwrap();
     menu.append(&upload_item).unwrap();
     menu.append(&paste_item).unwrap();
     menu.append(&PredefinedMenuItem::separator()).unwrap();

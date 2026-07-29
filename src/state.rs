@@ -15,6 +15,7 @@ pub const SETTING_LABELS: &[(&str, &str)] = &[
     ("chunk_size_bytes", "Chunk Size (bytes)"),
     ("pairing_timeout_secs", "Pairing Timeout (secs)"),
     ("upload_ttl_hours", "Upload TTL (hours)"),
+    ("app_upload_instance", "App Upload Instance"),
     ("log_level", "Log Level"),
 ];
 
@@ -216,20 +217,82 @@ impl App {
                     .map(|(_, l)| *l)
                     .unwrap_or(&key);
 
-                let current = self.config.lock().unwrap().current_value(&key);
-
-                if let Some(new_val) = tinyfiledialogs::input_box(
-                    "juicebox-plus Settings",
-                    &format!("{label}\n\nCurrent: {current}"),
-                    &current,
-                ) {
-                    if new_val != current {
-                        match self.config.lock().unwrap().update(&key, &new_val) {
-                            Ok(()) => {
-                                notify("juicebox-plus", &format!("{label} updated to {new_val}"))
-                            }
+                if key == "upload_ttl_hours" {
+                    let config = Arc::clone(&self.config);
+                    std::thread::spawn(move || {
+                        let rt = match tokio::runtime::Runtime::new() {
+                            Ok(rt) => rt,
                             Err(e) => {
-                                notify("juicebox-plus", &format!("Failed to update {label}: {e}"))
+                                tracing::error!("Failed to create tokio runtime: {e}");
+                                return;
+                            }
+                        };
+                        rt.block_on(async {
+                            let instance = config.lock().unwrap().juicebox_instance.clone();
+                            let instance = instance.trim_end_matches('/').to_string();
+                            let api_url = format!("{instance}/api/config");
+
+                            let mut allowed_ttls: Vec<f64> = Vec::new();
+                            let mut fetched = false;
+
+                            if let Ok(resp) = reqwest::get(&api_url).await {
+                                if resp.status().is_success() {
+                                    if let Ok(cfg) = resp.json::<serde_json::Value>().await {
+                                        if let Some(arr) = cfg.get("allowed_ttl_hours").and_then(|v| v.as_array()) {
+                                            allowed_ttls = arr.iter().filter_map(|v| v.as_f64()).collect();
+                                            fetched = true;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if !fetched {
+                                allowed_ttls = vec![1.0, 2.0, 6.0, 12.0, 24.0, 48.0, 72.0, 168.0];
+                            }
+
+                            let current = config.lock().unwrap().upload_ttl_hours;
+                            let mut msg = String::from("Available TTLs:\n");
+                            msg.push_str("  default (Server default)\n");
+                            for h in &allowed_ttls {
+                                if *h == 1.0 {
+                                    msg.push_str("  1\n");
+                                } else {
+                                    msg.push_str(&format!("  {h}\n"));
+                                }
+                            }
+                            msg.push_str("\nEnter a number (hours) or \"default\":");
+
+                            let current_text = current.map(|v| v.to_string()).unwrap_or_else(|| "default".to_string());
+                            if let Some(new_val) = tinyfiledialogs::input_box(
+                                "Upload TTL",
+                                &msg,
+                                &current_text,
+                            ) {
+                                if new_val != current_text {
+                                    let mut cfg = config.lock().unwrap();
+                                    if cfg.update("upload_ttl_hours", &new_val).is_ok() {
+                                        notify("juicebox-plus", &format!("Upload TTL updated to {new_val}"));
+                                    }
+                                }
+                            }
+                        });
+                    });
+                } else {
+                    let current = self.config.lock().unwrap().current_value(&key);
+
+                    if let Some(new_val) = tinyfiledialogs::input_box(
+                        "juicebox-plus Settings",
+                        &format!("{label}\n\nCurrent: {current}"),
+                        &current,
+                    ) {
+                        if new_val != current {
+                            match self.config.lock().unwrap().update(&key, &new_val) {
+                                Ok(()) => {
+                                    notify("juicebox-plus", &format!("{label} updated to {new_val}"))
+                                }
+                                Err(e) => {
+                                    notify("juicebox-plus", &format!("Failed to update {label}: {e}"))
+                                }
                             }
                         }
                     }
