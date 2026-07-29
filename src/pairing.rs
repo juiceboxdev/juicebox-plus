@@ -46,11 +46,14 @@ mod platform {
                 }
                 Err(e) => {
                     tracing::error!("Pairing flow error: {e}");
+                    #[cfg(target_os = "linux")]
                     let _ = notify_rust::Notification::new()
                         .summary("juicebox-plus")
                         .body("Pairing failed. Check logs.")
                         .appname("juicebox-plus")
                         .show();
+                    #[cfg(not(target_os = "linux"))]
+                    tracing::info!("Pairing failed. Check logs.");
                 }
             }
         });

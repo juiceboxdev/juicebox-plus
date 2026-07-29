@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+#[cfg(target_os = "linux")]
 use notify_rust::Notification;
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
 
@@ -256,10 +257,16 @@ impl App {
     }
 }
 
+#[cfg(target_os = "linux")]
 pub fn notify(summary: &str, body: &str) {
     let _ = Notification::new()
         .summary(summary)
         .body(body)
         .appname("juicebox-plus")
         .show();
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn notify(_summary: &str, body: &str) {
+    tracing::info!("{body}");
 }
