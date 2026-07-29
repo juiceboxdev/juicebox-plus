@@ -37,8 +37,8 @@ pub fn create_tray_icon(
     let status_item = MenuItem::new("Status", true, None);
 
     let pair_label = match (&paired, &device_name) {
-        (true, _) => "Paired \u{2713}",
-        (false, _) => "Pair Device...",
+        (true, _) => "\u{2611} Paired",
+        (false, _) => "\u{2612} Pair Device...",
     };
     let pair_item = MenuItem::new(pair_label, true, None);
 
