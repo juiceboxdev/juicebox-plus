@@ -51,7 +51,7 @@ jobs:
           git commit -m "aur update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           git remote add aur ssh://aur@aur.archlinux.org/juicebox2-plus-git.git
           GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git fetch aur master 2>/dev/null || true
-          if [ -f .git/FETCH_HEAD ]; then
+          if git rev-parse --verify FETCH_HEAD >/dev/null 2>&1; then
             git reset --soft FETCH_HEAD
           fi
           git add -A
@@ -104,7 +104,7 @@ jobs:
           git commit -m "aur update $version ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
           git remote add aur ssh://aur@aur.archlinux.org/juicebox2-plus-git-bin.git
           GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git fetch aur master 2>/dev/null || true
-          if [ -f .git/FETCH_HEAD ]; then
+          if git rev-parse --verify FETCH_HEAD >/dev/null 2>&1; then
             git reset --soft FETCH_HEAD
           fi
           git add -A
