@@ -26,27 +26,27 @@ jobs:
 
           cp "$GITHUB_WORKSPACE/packaging/linux/arch/PKGBUILD" .
 
-          cat > .SRCINFO << EOF
-          pkgbase = juicebox-plus-git
-          \tpkgdesc = The companion app for juicebox!
-          \tpkgver = r0.0000000
-          \tpkgrel = 1
-          \turl = https://github.com/juiceboxdev/juicebox-plus
-          \tarch = x86_64
-          \tlicense = LGPL-3.0-or-later
-          \tmakedepends = git
-          \tmakedepends = cargo
-          \tdepends = gtk3
-          \tdepends = libappindicator-gtk3
-          \tdepends = libdbus
-          \tdepends = libxdo
-          \tdepends = glibc
-          \tprovides = juicebox-plus
-          \tconflicts = juicebox-plus
-          \tsource = git+https://github.com/juiceboxdev/juicebox-plus.git
-          \tmd5sums = SKIP
-          pkgname = juicebox-plus-git
-          EOF
+          cat > .SRCINFO << SRCEND
+pkgbase = juicebox-plus-git
+  pkgdesc = The companion app for juicebox!
+  pkgver = r0.0000000
+  pkgrel = 1
+  url = https://github.com/juiceboxdev/juicebox-plus
+  arch = x86_64
+  license = LGPL-3.0-or-later
+  makedepends = git
+  makedepends = cargo
+  depends = gtk3
+  depends = libappindicator-gtk3
+  depends = libdbus
+  depends = libxdo
+  depends = glibc
+  provides = juicebox-plus
+  conflicts = juicebox-plus
+  source = git+https://github.com/juiceboxdev/juicebox-plus.git
+  md5sums = SKIP
+pkgname = juicebox-plus-git
+SRCEND
 
           git init
           git config user.name "JuiceyDev"
@@ -75,61 +75,61 @@ jobs:
           cd /tmp
           rm -rf aur-push && mkdir aur-push && cd aur-push
 
-          cat > PKGBUILD << PKGEOF
-          # Maintainer: JuiceyDev <me@juicey.dev>
-          # Contributor: JuiceyDev <me@juicey.dev>
+          cat > PKGBUILD << PKGEND
+# Maintainer: JuiceyDev <me@juicey.dev>
+# Contributor: JuiceyDev <me@juicey.dev>
 
-          pkgname=juicebox-plus-bin
-          pkgver=$version
-          pkgrel=1
-          pkgdesc='The companion app for juicebox! (binary release)'
-          arch=('x86_64')
-          url='https://github.com/juiceboxdev/juicebox-plus'
-          license=('LGPL-3.0-or-later')
-          depends=('gtk3' 'libappindicator-gtk3' 'libdbus' 'libxdo' 'glibc')
-          provides=('juicebox-plus')
-          conflicts=('juicebox-plus')
-          source=(
-            "https://github.com/juiceboxdev/juicebox-plus/releases/download/${GITHUB_REF_NAME}/juicebox-plus-linux"
-            "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/packaging/linux/juicebox-plus.desktop"
-            "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/assets/logo.png"
-            "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/LICENSE"
-          )
-          md5sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+pkgname=juicebox-plus-bin
+pkgver=$version
+pkgrel=1
+pkgdesc='The companion app for juicebox! (binary release)'
+arch=('x86_64')
+url='https://github.com/juiceboxdev/juicebox-plus'
+license=('LGPL-3.0-or-later')
+depends=('gtk3' 'libappindicator-gtk3' 'libdbus' 'libxdo' 'glibc')
+provides=('juicebox-plus')
+conflicts=('juicebox-plus')
+source=(
+  "https://github.com/juiceboxdev/juicebox-plus/releases/download/${GITHUB_REF_NAME}/juicebox-plus-linux"
+  "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/packaging/linux/juicebox-plus.desktop"
+  "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/assets/logo.png"
+  "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/LICENSE"
+)
+md5sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
 
-          package() {
-            install -Dm755 "juicebox-plus-linux" "\$pkgdir/usr/bin/juicebox-plus"
-            install -Dm644 "juicebox-plus.desktop" "\$pkgdir/usr/share/applications/juicebox-plus.desktop"
-            install -Dm644 "logo.png" "\$pkgdir/usr/share/pixmaps/juicebox-plus.png"
-            install -Dm644 "LICENSE" "\$pkgdir/usr/share/licenses/\$pkgname/LICENSE"
-          }
-          PKGEOF
+package() {
+  install -Dm755 "juicebox-plus-linux" "\$pkgdir/usr/bin/juicebox-plus"
+  install -Dm644 "juicebox-plus.desktop" "\$pkgdir/usr/share/applications/juicebox-plus.desktop"
+  install -Dm644 "logo.png" "\$pkgdir/usr/share/pixmaps/juicebox-plus.png"
+  install -Dm644 "LICENSE" "\$pkgdir/usr/share/licenses/\$pkgname/LICENSE"
+}
+PKGEND
 
-          cat > .SRCINFO << EOF
-          pkgbase = juicebox-plus-bin
-          \tpkgdesc = The companion app for juicebox! (binary release)
-          \tpkgver = $version
-          \tpkgrel = 1
-          \turl = https://github.com/juiceboxdev/juicebox-plus
-          \tarch = x86_64
-          \tlicense = LGPL-3.0-or-later
-          \tdepends = gtk3
-          \tdepends = libappindicator-gtk3
-          \tdepends = libdbus
-          \tdepends = libxdo
-          \tdepends = glibc
-          \tprovides = juicebox-plus
-          \tconflicts = juicebox-plus
-          \tsource = https://github.com/juiceboxdev/juicebox-plus/releases/download/${GITHUB_REF_NAME}/juicebox-plus-linux
-          \tsource = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/packaging/linux/juicebox-plus.desktop
-          \tsource = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/assets/logo.png
-          \tsource = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/LICENSE
-          \tmd5sums = SKIP
-          \tmd5sums = SKIP
-          \tmd5sums = SKIP
-          \tmd5sums = SKIP
-          pkgname = juicebox-plus-bin
-          EOF
+          cat > .SRCINFO << SRCEND
+pkgbase = juicebox-plus-bin
+  pkgdesc = The companion app for juicebox! (binary release)
+  pkgver = $version
+  pkgrel = 1
+  url = https://github.com/juiceboxdev/juicebox-plus
+  arch = x86_64
+  license = LGPL-3.0-or-later
+  depends = gtk3
+  depends = libappindicator-gtk3
+  depends = libdbus
+  depends = libxdo
+  depends = glibc
+  provides = juicebox-plus
+  conflicts = juicebox-plus
+  source = https://github.com/juiceboxdev/juicebox-plus/releases/download/${GITHUB_REF_NAME}/juicebox-plus-linux
+  source = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/packaging/linux/juicebox-plus.desktop
+  source = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/assets/logo.png
+  source = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/LICENSE
+  md5sums = SKIP
+  md5sums = SKIP
+  md5sums = SKIP
+  md5sums = SKIP
+pkgname = juicebox-plus-bin
+SRCEND
 
           git init
           git config user.name "JuiceyDev"
