@@ -97,6 +97,7 @@ impl Config {
         {
             use std::fs::OpenOptions;
             use std::io::Write;
+            #[cfg(unix)]
             use std::os::unix::fs::OpenOptionsExt;
             let mut opts = OpenOptions::new();
             opts.write(true).create(true).truncate(true);

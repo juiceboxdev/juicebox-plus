@@ -48,8 +48,39 @@ jobs:
           name: juicebox-plus-${{ matrix.os }}
           path: target/release/juicebox-plus-*
 
-  release:
+  package-windows:
     needs: build
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: juicebox-plus-windows-latest
+          path: staging
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Create installer
+        shell: pwsh
+        run: |
+          Copy-Item staging\juicebox-plus-windows.exe packaging\windows\juicebox-plus.exe
+          $version = "${{ github.ref_name }}"
+          $version = $version -replace '^v', ''
+          iscc /dAppVersion=$version packaging\windows\setup.iss
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: juicebox-plus-windows-setup
+          path: packaging/windows/juicebox-plus-setup-*.exe
+
+  release:
+    needs: [build, package-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write

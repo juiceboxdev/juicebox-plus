@@ -172,9 +172,8 @@ mod platform {
 mod platform {
     use std::sync::{Arc, Mutex};
 
-    use windows::core::{IInspectable, HSTRING};
+    use windows::core::{IInspectable, HSTRING, Interface};
     use windows::Data::Xml::Dom::XmlDocument;
-    use windows::Foundation::TypedEventHandler;
     use windows::UI::Notifications::{
         ToastActivatedEventArgs, ToastDismissedEventArgs, ToastNotification,
         ToastNotificationManager,
@@ -220,7 +219,7 @@ mod platform {
         let reply: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
         let reply_activated = reply.clone();
 
-        let _ = notification.Activated(TypedEventHandler::new(
+        let _ = notification.Activated(
             move |_sender: &Option<ToastNotification>, args: &Option<IInspectable>| {
                 if let Some(inspectable) = args {
                     if let Ok(args) = inspectable.cast::<ToastActivatedEventArgs>() {
@@ -250,13 +249,13 @@ mod platform {
                 }
                 Ok(())
             },
-        ));
+        );
 
-        let _ = notification.Dismissed(TypedEventHandler::new(
+        let _ = notification.Dismissed(
             move |_sender: &Option<ToastNotification>, _args: &Option<ToastDismissedEventArgs>| {
                 Ok(())
             },
-        ));
+        );
 
         let notifier = match ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(
             "juicebox-plus",
