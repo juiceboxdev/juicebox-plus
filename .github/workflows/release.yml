@@ -30,19 +30,23 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      - name: Upload artifact (Unix)
-        if: runner.os != 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: juicebox-plus-${{ matrix.os }}
-          path: target/release/juicebox-plus
+      - name: Rename binary (Linux)
+        if: runner.os == 'Linux'
+        run: mv target/release/juicebox-plus target/release/juicebox-plus-linux
 
-      - name: Upload artifact (Windows)
+      - name: Rename binary (macOS)
+        if: runner.os == 'macOS'
+        run: mv target/release/juicebox-plus target/release/juicebox-plus-macos
+
+      - name: Rename binary (Windows)
         if: runner.os == 'Windows'
+        run: mv target/release/juicebox-plus.exe target/release/juicebox-plus-windows.exe
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: juicebox-plus-${{ matrix.os }}
-          path: target/release/juicebox-plus.exe
+          path: target/release/juicebox-plus-*
 
   release:
     needs: build
