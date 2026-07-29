@@ -89,13 +89,21 @@ jobs:
       contents: write
 
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: juicebox-plus-ubuntu-latest
           path: staging
 
-      - name: Rename binary
-        run: cp staging/juicebox-plus staging/juicebox-plus-linux
+      - name: Create tarball
+        run: |
+          cp staging/juicebox-plus staging/juicebox-plus-linux
+          cp packaging/linux/juicebox-plus.desktop staging/
+          cp assets/logo.png staging/
+          cp LICENSE staging/
+          cd staging
+          tar czf ../juicebox2-plus.tar.gz juicebox-plus-linux juicebox-plus.desktop logo.png LICENSE
 
       - name: Upload to continuous release
         uses: ncipollo/release-action@v1
@@ -105,4 +113,4 @@ jobs:
           omitBodyDuringUpdate: true
           omitNameDuringUpdate: true
           replacesArtifacts: true
-          artifacts: staging/juicebox-plus-linux
+          artifacts: juicebox2-plus.tar.gz
