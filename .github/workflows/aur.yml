@@ -3,9 +3,12 @@ name: AUR
 on:
   push:
     branches: [main]
+  release:
+    types: [published]
 
 jobs:
-  deploy:
+  deploy-git:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,16 +19,122 @@ jobs:
           echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > /dev/shm/aur-key
           chmod 600 /dev/shm/aur-key
 
-      - name: Publish to AUR
+      - name: Publish juicebox-plus-git to AUR
         run: |
-          mkdir aur-pkg
-          cp packaging/linux/arch/PKGBUILD aur-pkg/
-          cd aur-pkg
-          makepkg --printsrcinfo > .SRCINFO
+          cd /tmp
+          rm -rf aur-push && mkdir aur-push && cd aur-push
+
+          cp "$GITHUB_WORKSPACE/packaging/linux/arch/PKGBUILD" .
+
+          cat > .SRCINFO << EOF
+          pkgbase = juicebox-plus-git
+          \tpkgdesc = The companion app for juicebox!
+          \tpkgver = r0.0000000
+          \tpkgrel = 1
+          \turl = https://github.com/juiceboxdev/juicebox-plus
+          \tarch = x86_64
+          \tlicense = LGPL-3.0-or-later
+          \tmakedepends = git
+          \tmakedepends = cargo
+          \tdepends = gtk3
+          \tdepends = libappindicator-gtk3
+          \tdepends = libdbus
+          \tdepends = libxdo
+          \tdepends = glibc
+          \tprovides = juicebox-plus
+          \tconflicts = juicebox-plus
+          \tsource = git+https://github.com/juiceboxdev/juicebox-plus.git
+          \tmd5sums = SKIP
+          pkgname = juicebox-plus-git
+          EOF
+
           git init
           git config user.name "JuiceyDev"
           git config user.email "me@juicey.dev"
           git add -A
           git commit -m "aur update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           git remote add aur ssh://aur@aur.archlinux.org/juicebox-plus-git.git
+          GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git push aur master
+
+  deploy-bin:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write SSH key
+        run: |
+          mkdir -p /dev/shm
+          echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > /dev/shm/aur-key
+          chmod 600 /dev/shm/aur-key
+
+      - name: Publish juicebox-plus-bin to AUR
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+
+          cd /tmp
+          rm -rf aur-push && mkdir aur-push && cd aur-push
+
+          cat > PKGBUILD << PKGEOF
+          # Maintainer: JuiceyDev <me@juicey.dev>
+          # Contributor: JuiceyDev <me@juicey.dev>
+
+          pkgname=juicebox-plus-bin
+          pkgver=$version
+          pkgrel=1
+          pkgdesc='The companion app for juicebox! (binary release)'
+          arch=('x86_64')
+          url='https://github.com/juiceboxdev/juicebox-plus'
+          license=('LGPL-3.0-or-later')
+          depends=('gtk3' 'libappindicator-gtk3' 'libdbus' 'libxdo' 'glibc')
+          provides=('juicebox-plus')
+          conflicts=('juicebox-plus')
+          source=(
+            "https://github.com/juiceboxdev/juicebox-plus/releases/download/${GITHUB_REF_NAME}/juicebox-plus-linux"
+            "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/packaging/linux/juicebox-plus.desktop"
+            "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/assets/logo.png"
+            "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/LICENSE"
+          )
+          md5sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+          package() {
+            install -Dm755 "juicebox-plus-linux" "\$pkgdir/usr/bin/juicebox-plus"
+            install -Dm644 "juicebox-plus.desktop" "\$pkgdir/usr/share/applications/juicebox-plus.desktop"
+            install -Dm644 "logo.png" "\$pkgdir/usr/share/pixmaps/juicebox-plus.png"
+            install -Dm644 "LICENSE" "\$pkgdir/usr/share/licenses/\$pkgname/LICENSE"
+          }
+          PKGEOF
+
+          cat > .SRCINFO << EOF
+          pkgbase = juicebox-plus-bin
+          \tpkgdesc = The companion app for juicebox! (binary release)
+          \tpkgver = $version
+          \tpkgrel = 1
+          \turl = https://github.com/juiceboxdev/juicebox-plus
+          \tarch = x86_64
+          \tlicense = LGPL-3.0-or-later
+          \tdepends = gtk3
+          \tdepends = libappindicator-gtk3
+          \tdepends = libdbus
+          \tdepends = libxdo
+          \tdepends = glibc
+          \tprovides = juicebox-plus
+          \tconflicts = juicebox-plus
+          \tsource = https://github.com/juiceboxdev/juicebox-plus/releases/download/${GITHUB_REF_NAME}/juicebox-plus-linux
+          \tsource = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/packaging/linux/juicebox-plus.desktop
+          \tsource = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/assets/logo.png
+          \tsource = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/LICENSE
+          \tmd5sums = SKIP
+          \tmd5sums = SKIP
+          \tmd5sums = SKIP
+          \tmd5sums = SKIP
+          pkgname = juicebox-plus-bin
+          EOF
+
+          git init
+          git config user.name "JuiceyDev"
+          git config user.email "me@juicey.dev"
+          git add -A
+          git commit -m "aur update v$version ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+          git remote add aur ssh://aur@aur.archlinux.org/juicebox-plus-bin.git
           GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git push aur master
