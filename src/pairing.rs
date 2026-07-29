@@ -221,7 +221,7 @@ mod platform {
         let reply_activated = reply.clone();
 
         let activated_handler = TypedEventHandler::<ToastNotification, IInspectable>::new(
-            move |_sender: windows_core::Ref<'_, ToastNotification>, args: windows_core::Ref<'_, IInspectable>| {
+            move |_sender: ::windows::core::Ref<'_, ToastNotification>, args: ::windows::core::Ref<'_, IInspectable>| {
                 if let Ok(args) = args.cast::<ToastActivatedEventArgs>() {
                     if let Ok(arguments) = args.Arguments() {
                         let arguments_str = arguments.to_string();
@@ -254,7 +254,7 @@ mod platform {
         let _ = notification.Activated(&activated_handler);
 
         let dismissed_handler = TypedEventHandler::<ToastNotification, ToastDismissedEventArgs>::new(
-            move |_sender: windows_core::Ref<'_, ToastNotification>, _args: windows_core::Ref<'_, ToastDismissedEventArgs>| {
+            move |_sender: ::windows::core::Ref<'_, ToastNotification>, _args: ::windows::core::Ref<'_, ToastDismissedEventArgs>| {
                 Ok(())
             },
         );
