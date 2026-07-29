@@ -220,6 +220,266 @@ fn rand_u16() -> u16 {
     h.finish() as u16
 }
 
+/// Upload a file from the app: reserve → upload → complete → return URL.
+pub async fn app_upload(
+    file_path: &str,
+    ttl_hours: Option<f64>,
+) -> Result<String, IpcError> {
+    let token = crate::token::load_token()
+        .ok_or_else(|| IpcError::ConnectionFailed("Not paired".into()))?;
+
+    let file_name = std::path::Path::new(file_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("upload")
+        .to_string();
+
+    let metadata = tokio::fs::metadata(file_path)
+        .await
+        .map_err(|e| IpcError::ProtocolError(format!("Failed to stat file: {e}")))?;
+
+    let file_size = metadata.len();
+    let mime_type = guess_mime(&file_name);
+
+    let cfg = crate::config::Config::load();
+    let instance = cfg.juicebox_instance.trim_end_matches('/').to_string();
+
+    let client = reqwest::Client::new();
+
+    let reserve_url = format!("{instance}/api/device/upload");
+    let reserve_body = serde_json::json!({
+        "filename": file_name,
+        "mime_type": mime_type,
+        "file_size": file_size,
+        "ttl_hours": ttl_hours,
+    });
+
+    let reserve_resp = client
+        .post(&reserve_url)
+        .header("Authorization", format!("Bearer {token}"))
+        .json(&reserve_body)
+        .send()
+        .await
+        .map_err(|e| IpcError::ConnectionFailed(format!("Reserve request failed: {e}")))?;
+
+    if !reserve_resp.status().is_success() {
+        let text = reserve_resp.text().await.unwrap_or_default();
+        return Err(IpcError::ConnectionFailed(format!(
+            "Reserve failed: {text}"
+        )));
+    }
+
+    let reserve: serde_json::Value = reserve_resp
+        .json()
+        .await
+        .map_err(|e| IpcError::ProtocolError(format!("Reserve response parse failed: {e}")))?;
+
+    let ticket = reserve
+        .get("ticket")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| IpcError::ProtocolError("Missing ticket in reserve response".into()))?;
+    let file_id = reserve
+        .get("file_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| IpcError::ProtocolError("Missing file_id in reserve response".into()))?;
+    let juicehost_url = reserve
+        .get("juicehost_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let download_url = reserve
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    tracing::info!("Reserved slot: file_id={file_id} ticket={ticket}");
+
+    // Upload to juicehost
+    let upload_url = format!(
+        "{}/internal/file/upload/{}",
+        juicehost_url.trim_end_matches('/'),
+        file_id
+    );
+
+    let total_bytes = file_size;
+    let display_name = file_name.clone();
+
+    let mut progress = ProgressTracker::start(&format!("Uploading {display_name}..."), total_bytes);
+
+    // Pre-flight check
+    let config_url = format!("{}/api/config", juicehost_url.trim_end_matches('/'));
+    if let Ok(resp) = client.get(&config_url).send().await {
+        if let Ok(cfg) = resp.json::<serde_json::Value>().await {
+            if let Some(max_size) = cfg.get("max_file_size_bytes").and_then(|v| v.as_u64()) {
+                if total_bytes > max_size {
+                    let file_mb = total_bytes / 1_048_576;
+                    let max_mb = max_size / 1_048_576;
+                    progress.finish(&format!(
+                        "File too large: {file_mb} MB exceeds server limit of {max_mb} MB"
+                    ));
+                    return Err(IpcError::ConnectionFailed(format!(
+                        "File too large ({file_mb} MB). Server limit is {max_mb} MB."
+                    )));
+                }
+            }
+        }
+    }
+
+    type StreamError = Box<dyn std::error::Error + Send + Sync>;
+    const CHUNK_SIZE: usize = 64 * 1024;
+    let file = tokio::fs::File::open(file_path)
+        .await
+        .map_err(|e| IpcError::ProtocolError(format!("Failed to open file: {e}")))?;
+
+    let progress = std::sync::Arc::new(std::sync::Mutex::new(progress));
+    let progress_clone = progress.clone();
+    let stream = futures_util::stream::unfold(
+        (file, 0u64, total_bytes, progress_clone),
+        |(mut file, sent, total, prog)| async move {
+            if sent >= total {
+                return None;
+            }
+            let to_read = CHUNK_SIZE.min((total - sent) as usize);
+            let mut buf = vec![0u8; to_read];
+            use tokio::io::AsyncReadExt;
+            match file.read_exact(&mut buf).await {
+                Ok(_) => {
+                    let new_sent = sent + buf.len() as u64;
+                    if let Ok(mut p) = prog.lock() {
+                        p.update(new_sent);
+                    }
+                    Some((
+                        Ok::<_, StreamError>(bytes::Bytes::from(buf)),
+                        (file, new_sent, total, prog),
+                    ))
+                }
+                Err(e) => Some((Err(e.into()), (file, sent, total, prog))),
+            }
+        },
+    );
+
+    let response = client
+        .post(&upload_url)
+        .header("Authorization", format!("Bearer {ticket}"))
+        .header("Content-Type", &mime_type)
+        .header("X-Juicebox-File-Name", &file_name)
+        .body(reqwest::Body::wrap_stream(stream))
+        .send()
+        .await
+        .map_err(|e| IpcError::ConnectionFailed(format!("Upload request failed: {e}")))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let text = response.text().await.unwrap_or_default();
+        let user_msg = format!("Upload failed: HTTP {status}");
+        if let Ok(mut p) = progress.lock() {
+            p.finish(&user_msg);
+        }
+        return Err(IpcError::ConnectionFailed(format!(
+            "{user_msg} Server response: {text}"
+        )));
+    }
+
+    if let Ok(mut p) = progress.lock() {
+        p.finish(&format!(
+            "Upload complete: {display_name} ({} MB)",
+            total_bytes / 1_048_576
+        ));
+    }
+
+    // Mark complete on juiceback
+    let complete_url = format!(
+        "{}/upload/ultrafast/complete",
+        instance.trim_end_matches('/')
+    );
+    let complete_body = serde_json::json!({
+        "file_id": file_id,
+        "filename": file_name,
+        "mime_type": mime_type,
+        "file_size": total_bytes,
+        "ticket": ticket,
+    });
+
+    let complete_response = client
+        .post(&complete_url)
+        .header("Authorization", format!("Bearer {token}"))
+        .json(&complete_body)
+        .send()
+        .await
+        .map_err(|e| {
+            tracing::warn!("Failed to notify juiceback of completion: {e}");
+            IpcError::ConnectionFailed(format!(
+                "Upload succeeded but failed to notify juiceback: {e}"
+            ))
+        })?;
+
+    let complete_status = complete_response.status();
+    if !complete_status.is_success() {
+        let text = complete_response.text().await.unwrap_or_default();
+        tracing::warn!("juiceback complete returned HTTP {complete_status}: {text}");
+        return Err(IpcError::ConnectionFailed(format!(
+            "Upload succeeded but juiceback refused to mark it complete (HTTP {complete_status}): {text}"
+        )));
+    }
+
+    // Extract final URL from complete response
+    let complete_json: serde_json::Value = complete_response
+        .json()
+        .await
+        .map_err(|e| IpcError::ProtocolError(format!("Complete response parse failed: {e}")))?;
+
+    let final_url = complete_json
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or(download_url)
+        .to_string();
+
+    tracing::info!("Upload complete: {final_url}");
+
+    Ok(final_url)
+}
+
+/// Upload multiple files sequentially.
+pub async fn app_upload_many(
+    file_paths: &[String],
+    ttl_hours: Option<f64>,
+) -> Result<Vec<String>, IpcError> {
+    let mut urls = Vec::new();
+    for path in file_paths {
+        let url = app_upload(path, ttl_hours).await?;
+        urls.push(url);
+    }
+    Ok(urls)
+}
+
+fn guess_mime(filename: &str) -> String {
+    let ext = std::path::Path::new(filename)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    match ext.as_str() {
+        "png" => "image/png".into(),
+        "jpg" | "jpeg" => "image/jpeg".into(),
+        "gif" => "image/gif".into(),
+        "webp" => "image/webp".into(),
+        "svg" => "image/svg+xml".into(),
+        "mp4" => "video/mp4".into(),
+        "mp3" => "audio/mpeg".into(),
+        "pdf" => "application/pdf".into(),
+        "zip" => "application/zip".into(),
+        "tar" => "application/x-tar".into(),
+        "gz" | "gzip" => "application/gzip".into(),
+        "json" => "application/json".into(),
+        "txt" | "text" => "text/plain".into(),
+        "html" | "htm" => "text/html".into(),
+        "css" => "text/css".into(),
+        "js" => "application/javascript".into(),
+        "wasm" => "application/wasm".into(),
+        "iso" => "application/x-iso9660-image".into(),
+        _ => "application/octet-stream".into(),
+    }
+}
+
 /// Push a file straight to juicehost with a JWT ticket, then tell juiceback we're done.
 /// throws up a progress dialog so you know it's working.
 pub async fn ultrafast_upload(
@@ -389,5 +649,11 @@ pub async fn ultrafast_upload(
 
     tracing::info!("Marked file as complete on juiceback");
 
-    Ok(String::new())
+    let url = if let Ok(json) = complete_response.json::<serde_json::Value>().await {
+        json.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string()
+    } else {
+        String::new()
+    };
+
+    Ok(url)
 }

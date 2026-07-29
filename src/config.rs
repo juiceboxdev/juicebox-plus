@@ -18,6 +18,7 @@ pub struct Config {
     pub compression_mode: String,
 
     pub pairing_timeout_secs: u64,
+    pub upload_ttl_hours: Option<f64>,
 
     pub paired: bool,
     pub device_id: Option<String>,
@@ -35,6 +36,7 @@ impl Default for Config {
             fec_enabled: true,
             compression_mode: "auto".into(),
             pairing_timeout_secs: 30,
+            upload_ttl_hours: None,
             paired: false,
             device_id: None,
             log_level: "info".into(),
@@ -115,6 +117,7 @@ impl Config {
             "juicebox_instance" => self.juicebox_instance.clone(),
             "chunk_size_bytes" => self.chunk_size_bytes.to_string(),
             "pairing_timeout_secs" => self.pairing_timeout_secs.to_string(),
+            "upload_ttl_hours" => self.upload_ttl_hours.map(|v| v.to_string()).unwrap_or_else(|| "default".to_string()),
             "paired" => self.paired.to_string(),
             "device_id" => self.device_id.clone().unwrap_or_default(),
             "log_level" => self.log_level.clone(),
@@ -131,6 +134,14 @@ impl Config {
             }
             "pairing_timeout_secs" => {
                 self.pairing_timeout_secs = value.parse().map_err(|_| "expected a number")?;
+            }
+            "upload_ttl_hours" => {
+                if value.trim().is_empty() || value == "default" {
+                    self.upload_ttl_hours = None;
+                } else {
+                    let hours: f64 = value.parse().map_err(|_| "expected a number")?;
+                    self.upload_ttl_hours = Some(hours);
+                }
             }
             "log_level" => self.log_level = value.to_string(),
             _ => return Err(format!("unknown setting: {setting}")),

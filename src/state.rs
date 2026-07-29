@@ -14,6 +14,7 @@ pub const SETTING_LABELS: &[(&str, &str)] = &[
     ("juicebox_instance", "Juicebox Instance"),
     ("chunk_size_bytes", "Chunk Size (bytes)"),
     ("pairing_timeout_secs", "Pairing Timeout (secs)"),
+    ("upload_ttl_hours", "Upload TTL (hours)"),
     ("log_level", "Log Level"),
 ];
 
@@ -47,6 +48,8 @@ pub enum TrayAction {
     Setting(String),
     DeviceConnected,
     DeviceDisconnected,
+    UploadFile,
+    PasteUpload,
     Quit,
 }
 
@@ -162,6 +165,7 @@ impl App {
             }
             TrayAction::PairingComplete(device_name) => {
                 tracing::info!("Pairing complete, spawning device WS client");
+                self.rebuild_tray();
                 let config = Arc::clone(&self.config);
                 let proxy = self.proxy.clone();
                 let _handle = crate::device_ws::spawn_device_ws(config, proxy);
@@ -231,6 +235,158 @@ impl App {
                     }
                 }
             }
+            TrayAction::UploadFile => {
+                tracing::info!("Upload file requested");
+                let config = Arc::clone(&self.config);
+                if !config.lock().unwrap().paired {
+                    notify("juicebox-plus", "Pair a device first to upload files");
+                    return;
+                }
+                let proxy = self.proxy.clone();
+                std::thread::spawn(move || {
+                    let files = tinyfiledialogs::open_file_dialog_multi(
+                        "Select files to upload",
+                        "",
+                        None,
+                    );
+                    let files = match files {
+                        Some(f) if !f.is_empty() => f,
+                        _ => {
+                            tracing::info!("File selection cancelled");
+                            return;
+                        }
+                    };
+                    let rt = match tokio::runtime::Runtime::new() {
+                        Ok(rt) => rt,
+                        Err(e) => {
+                            tracing::error!("Failed to create tokio runtime: {e}");
+                            return;
+                        }
+                    };
+                    rt.block_on(async {
+                        let ttl = config.lock().unwrap().upload_ttl_hours;
+                        match ipc::app_upload_many(&files, ttl).await {
+                            Ok(urls) => {
+                                let all = urls.join("\n");
+                                if let Ok(mut cb) = arboard::Clipboard::new() {
+                                    let _ = cb.set_text(all.clone());
+                                }
+                                let count = urls.len();
+                                let msg = if count == 1 {
+                                    format!("Upload complete!\nLink copied to clipboard")
+                                } else {
+                                    format!("{count} files uploaded!\nLinks copied to clipboard")
+                                };
+                                let _ = proxy.send_event(TrayAction::ShowStatus);
+                                notify("juicebox-plus", &msg);
+                            }
+                            Err(e) => {
+                                tracing::error!("Upload failed: {e}");
+                                notify("juicebox-plus", &format!("Upload failed: {e}"));
+                            }
+                        }
+                    });
+                });
+            }
+            TrayAction::PasteUpload => {
+                tracing::info!("Paste upload requested");
+                let config = Arc::clone(&self.config);
+                if !config.lock().unwrap().paired {
+                    notify("juicebox-plus", "Pair a device first to upload files");
+                    return;
+                }
+                let _proxy = self.proxy.clone();
+                std::thread::spawn(move || {
+                    let mut cb = match arboard::Clipboard::new() {
+                        Ok(c) => c,
+                        Err(e) => {
+                            notify("juicebox-plus", &format!("Clipboard error: {e}"));
+                            return;
+                        }
+                    };
+
+                    let temp_path = match cb.get_image() {
+                        Ok(img) => {
+                            let path = std::env::temp_dir().join(format!(
+                                "juicebox-paste-{}.png",
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis()
+                            ));
+                            let rgba = img.bytes.into_owned();
+                            let w = img.width as u32;
+                            let h = img.height as u32;
+                            if let Some(img_buffer) = image::RgbaImage::from_raw(w, h, rgba) {
+                                let _ = img_buffer.save(&path);
+                            }
+                            path
+                        }
+                        Err(_) => {
+                            match cb.get_text() {
+                                Ok(text) => {
+                                    let text = text.trim().to_string();
+                                    // Check if it's a file:// URI or a direct file path
+                                    let path = if let Some(stripped) = text.strip_prefix("file://") {
+                                        std::path::PathBuf::from(stripped)
+                                    } else {
+                                        std::path::PathBuf::from(&text)
+                                    };
+                                    if path.exists() && path.is_file() {
+                                        path
+                                    } else {
+                                        // Save text as .txt temp file
+                                        let path = std::env::temp_dir().join(format!(
+                                            "juicebox-paste-{}.txt",
+                                            std::time::SystemTime::now()
+                                                .duration_since(std::time::UNIX_EPOCH)
+                                                .unwrap_or_default()
+                                                .as_millis()
+                                        ));
+                                        let _ = std::fs::write(&path, &text);
+                                        path
+                                    }
+                                }
+                                Err(e) => {
+                                    notify("juicebox-plus", &format!("No file found in clipboard: {e}"));
+                                    return;
+                                }
+                            }
+                        }
+                    };
+
+                    let path_str = temp_path.to_string_lossy().to_string();
+                    let is_temp = temp_path.starts_with(std::env::temp_dir());
+
+                    let rt = match tokio::runtime::Runtime::new() {
+                        Ok(rt) => rt,
+                        Err(e) => {
+                            tracing::error!("Failed to create tokio runtime: {e}");
+                            if is_temp { let _ = std::fs::remove_file(&temp_path); }
+                            return;
+                        }
+                    };
+                    rt.block_on(async {
+                        let ttl = config.lock().unwrap().upload_ttl_hours;
+                        match ipc::app_upload(&path_str, ttl).await {
+                            Ok(url) => {
+                                if let Ok(mut cb) = arboard::Clipboard::new() {
+                                    let _ = cb.set_text(url.clone());
+                                }
+                                notify("juicebox-plus", "Upload complete!\nLink copied to clipboard");
+                            }
+                            Err(e) => {
+                                tracing::error!("Upload failed: {e}");
+                                notify("juicebox-plus", &format!("Upload failed: {e}"));
+                            }
+                        }
+                    });
+
+                    if is_temp {
+                        let _ = std::fs::remove_file(&temp_path);
+                    }
+                });
+            }
             TrayAction::DeviceConnected => {
                 tracing::info!("Device WS connected");
                 self.status = DaemonStatus::Connected;
@@ -245,6 +401,11 @@ impl App {
                 if let Some(ref icon) = self.tray_icon {
                     let _ = icon.set_tooltip(Some("juicebox-plus - Juicepipe Upload Daemon"));
                 }
+                // Rebuild tray to disable upload items if unpaired
+                let paired = self.config.lock().unwrap().paired;
+                if !paired {
+                    self.rebuild_tray();
+                }
             }
             TrayAction::Quit => {
                 tracing::info!("Quit requested");
@@ -254,6 +415,15 @@ impl App {
                 std::process::exit(0);
             }
         }
+    }
+
+    fn rebuild_tray(&mut self) {
+        let proxy = self.proxy.clone();
+        let config = Arc::clone(&self.config);
+        if let Some(old) = self.tray_icon.take() {
+            drop(old);
+        }
+        self.tray_icon = Some(tray::create_tray_icon(proxy, &config));
     }
 }
 

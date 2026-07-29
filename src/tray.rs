@@ -35,6 +35,13 @@ pub fn create_tray_icon(
 
     let pause_item = MenuItem::new("Pause", true, None);
     let status_item = MenuItem::new("Status", true, None);
+    let upload_item = MenuItem::new("Upload File...", true, None);
+    let paste_item = MenuItem::new("Paste Upload", true, None);
+
+    if !paired {
+        upload_item.set_enabled(false);
+        paste_item.set_enabled(false);
+    }
 
     let pair_label = match (&paired, &device_name) {
         (true, _) => "\u{2611} Paired",
@@ -69,6 +76,8 @@ pub fn create_tray_icon(
 
     let pause_id = pause_item.id().clone();
     let status_id = status_item.id().clone();
+    let upload_id = upload_item.id().clone();
+    let paste_id = paste_item.id().clone();
     let pair_id = pair_item.id().clone();
     let quit_id = quit_item.id().clone();
     let tls_id = tls_item.id().clone();
@@ -76,6 +85,8 @@ pub fn create_tray_icon(
 
     menu.append(&pause_item).unwrap();
     menu.append(&status_item).unwrap();
+    menu.append(&upload_item).unwrap();
+    menu.append(&paste_item).unwrap();
     menu.append(&PredefinedMenuItem::separator()).unwrap();
     menu.append(&pair_item).unwrap();
     menu.append(&settings_menu).unwrap();
@@ -88,21 +99,27 @@ pub fn create_tray_icon(
     let p4 = proxy.clone();
     let p5 = proxy.clone();
     let p6 = proxy.clone();
+    let p7 = proxy.clone();
+    let p8 = proxy.clone();
     MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
         if event.id == pause_id {
             let _ = p1.send_event(TrayAction::PauseResume);
         } else if event.id == status_id {
             let _ = p2.send_event(TrayAction::ShowStatus);
+        } else if event.id == upload_id {
+            let _ = p3.send_event(TrayAction::UploadFile);
+        } else if event.id == paste_id {
+            let _ = p4.send_event(TrayAction::PasteUpload);
         } else if event.id == pair_id {
-            let _ = p3.send_event(TrayAction::PairDevice);
+            let _ = p5.send_event(TrayAction::PairDevice);
         } else if event.id == quit_id {
-            let _ = p4.send_event(TrayAction::Quit);
+            let _ = p6.send_event(TrayAction::Quit);
         } else if event.id == tls_id {
-            let _ = p5.send_event(TrayAction::ToggleTls);
+            let _ = p7.send_event(TrayAction::ToggleTls);
         } else if event.id == fec_id {
-            let _ = p6.send_event(TrayAction::ToggleFec);
+            let _ = p8.send_event(TrayAction::ToggleFec);
         } else if let Some((_, mode)) = compression_ids.iter().find(|(id, _)| *id == event.id) {
-            let _ = p5.send_event(TrayAction::SetCompressionMode(mode.clone()));
+            let _ = p7.send_event(TrayAction::SetCompressionMode(mode.clone()));
         } else if let Some((_, key)) = setting_ids.iter().find(|(id, _)| *id == event.id) {
             let _ = p1.send_event(TrayAction::Setting(key.clone()));
         }

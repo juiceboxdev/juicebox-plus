@@ -6,3 +6,6 @@
 *.icns
 .iconset/
 *-staging/
+delta.db
+quic-cert.der
+quic-cert.key
