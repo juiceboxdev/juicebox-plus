@@ -174,6 +174,7 @@ mod platform {
 
     use windows::core::{IInspectable, HSTRING, Interface};
     use windows::Data::Xml::Dom::XmlDocument;
+    use windows::Foundation::TypedEventHandler;
     use windows::UI::Notifications::{
         ToastActivatedEventArgs, ToastDismissedEventArgs, ToastNotification,
         ToastNotificationManager,
@@ -219,7 +220,7 @@ mod platform {
         let reply: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
         let reply_activated = reply.clone();
 
-        let _ = notification.Activated(
+        let activated_handler = TypedEventHandler::<ToastNotification, IInspectable>::new(
             move |_sender: &Option<ToastNotification>, args: &Option<IInspectable>| {
                 if let Some(inspectable) = args {
                     if let Ok(args) = inspectable.cast::<ToastActivatedEventArgs>() {
@@ -237,7 +238,7 @@ mod platform {
                         }
                         if let Ok(user_input) = args.UserInput() {
                             if let Ok(code) = user_input.Lookup(&HSTRING::from("pairingCode")) {
-                                if let Ok(hstr) = code.try_into() {
+                                if let Ok(hstr) = TryInto::<HSTRING>::try_into(code) {
                                     let s: String = hstr.to_string();
                                     if !s.trim().is_empty() {
                                         *reply_activated.lock().unwrap() = Some(s);
@@ -250,12 +251,14 @@ mod platform {
                 Ok(())
             },
         );
+        let _ = notification.Activated(&activated_handler);
 
-        let _ = notification.Dismissed(
+        let dismissed_handler = TypedEventHandler::<ToastNotification, ToastDismissedEventArgs>::new(
             move |_sender: &Option<ToastNotification>, _args: &Option<ToastDismissedEventArgs>| {
                 Ok(())
             },
         );
+        let _ = notification.Dismissed(&dismissed_handler);
 
         let notifier = match ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(
             "juicebox-plus",
