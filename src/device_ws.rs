@@ -46,11 +46,10 @@ pub fn spawn_device_ws(
                     }
                 };
 
-                let ws_url = build_ws_url(&instance);
+                let ws_url = build_ws_url(&instance, &token);
                 tracing::info!("Connecting to device WebSocket: {}", ws_url);
 
-                let request = build_ws_request(&instance, &token);
-                let connect_result = tokio_tungstenite::connect_async(request).await;
+                let connect_result = tokio_tungstenite::connect_async(&ws_url).await;
 
                 match connect_result {
                     Ok((ws_stream, _response)) => {
@@ -340,7 +339,7 @@ async fn check_device_paired(instance: &str, token: &str) -> Option<bool> {
     }
 }
 
-fn build_ws_url(instance: &str) -> String {
+fn build_ws_url(instance: &str, token: &str) -> String {
     let base = instance.trim_end_matches('/');
     let base = if base.starts_with("https") {
         base.replacen("https", "wss", 1)
@@ -349,14 +348,5 @@ fn build_ws_url(instance: &str) -> String {
     } else {
         format!("ws://{base}")
     };
-    format!("{base}/api/device/ws")
-}
-
-fn build_ws_request(instance: &str, token: &str) -> http::Request<()> {
-    let url = build_ws_url(instance);
-    http::Request::builder()
-        .uri(&url)
-        .header("Authorization", format!("Bearer {token}"))
-        .body(())
-        .unwrap()
+    format!("{base}/api/device/ws?token={token}")
 }
