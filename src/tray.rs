@@ -10,6 +10,14 @@ use crate::state::{TrayAction, SETTING_LABELS};
 const COMPRESSION_MODES: &[(&str, &str)] =
     &[("auto", "Auto"), ("lz4", "LZ4"), ("disabled", "Disabled")];
 
+const LOG_LEVELS: &[(&str, &str)] = &[
+    ("error", "Error"),
+    ("warn", "Warn"),
+    ("info", "Info"),
+    ("debug", "Debug"),
+    ("trace", "Trace"),
+];
+
 fn load_icon() -> Icon {
     let bytes = include_bytes!("../assets/logo.png");
     let img = image::load_from_memory(bytes).expect("Failed to decode embedded logo.png");
@@ -18,15 +26,15 @@ fn load_icon() -> Icon {
     Icon::from_rgba(rgba.into_raw(), w, h).expect("Failed to create tray icon")
 }
 
-pub fn create_tray_icon(
+pub fn build_menu(
     proxy: EventLoopProxy<TrayAction>,
     config: &Arc<Mutex<Config>>,
-) -> tray_icon::TrayIcon {
-    let icon = load_icon();
+) -> Menu {
     let cfg = config.lock().unwrap();
     let use_tls = cfg.use_tls;
     let fec_enabled = cfg.fec_enabled;
     let current_compression = cfg.compression_mode.clone();
+    let current_log_level = cfg.log_level.clone();
     let paired = cfg.paired;
     let device_name = cfg.device_id.as_ref().map(|_| "Paired".to_string());
     drop(cfg);
@@ -36,7 +44,7 @@ pub fn create_tray_icon(
     let pause_item = MenuItem::new("Pause", true, None);
     let status_item = MenuItem::new("Status", true, None);
     let upload_item = MenuItem::new("Upload File...", true, None);
-    let paste_item = MenuItem::new("Paste Upload", true, None);
+    let paste_item = MenuItem::new("Upload Paste...", true, None);
 
     if !paired {
         upload_item.set_enabled(false);
@@ -63,16 +71,29 @@ pub fn create_tray_icon(
         compression_menu.append(&item).unwrap();
     }
 
-    settings_menu.append(&tls_item).unwrap();
-    settings_menu.append(&fec_item).unwrap();
-    settings_menu.append(&compression_menu).unwrap();
+    let log_level_menu = Submenu::new("Log Level", true);
+    let mut log_level_ids = Vec::new();
+    for (level, label) in LOG_LEVELS {
+        let item = CheckMenuItem::new(*label, true, current_log_level == *level, None);
+        log_level_ids.push((item.id().clone(), level.to_string()));
+        log_level_menu.append(&item).unwrap();
+    }
 
     let mut setting_ids = Vec::new();
     for (key, label) in SETTING_LABELS {
+        if *key == "log_level" {
+            continue;
+        }
         let item = MenuItem::new(*label, true, None);
         setting_ids.push((item.id().clone(), key.to_string()));
         settings_menu.append(&item).unwrap();
     }
+
+    settings_menu.append(&PredefinedMenuItem::separator()).unwrap();
+    settings_menu.append(&tls_item).unwrap();
+    settings_menu.append(&fec_item).unwrap();
+    settings_menu.append(&compression_menu).unwrap();
+    settings_menu.append(&log_level_menu).unwrap();
 
     let pause_id = pause_item.id().clone();
     let status_id = status_item.id().clone();
@@ -102,6 +123,7 @@ pub fn create_tray_icon(
     let p6 = proxy.clone();
     let p7 = proxy.clone();
     let p8 = proxy.clone();
+    let p9 = proxy.clone();
     MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
         if event.id == pause_id {
             let _ = p1.send_event(TrayAction::PauseResume);
@@ -121,10 +143,26 @@ pub fn create_tray_icon(
             let _ = p8.send_event(TrayAction::ToggleFec);
         } else if let Some((_, mode)) = compression_ids.iter().find(|(id, _)| *id == event.id) {
             let _ = p7.send_event(TrayAction::SetCompressionMode(mode.clone()));
+        } else if let Some((_, level)) = log_level_ids.iter().find(|(id, _)| *id == event.id) {
+            let _ = p9.send_event(TrayAction::SetLogLevel(level.clone()));
         } else if let Some((_, key)) = setting_ids.iter().find(|(id, _)| *id == event.id) {
             let _ = p1.send_event(TrayAction::Setting(key.clone()));
         }
     }));
+
+    menu
+}
+
+pub fn create_tray_icon(
+    proxy: EventLoopProxy<TrayAction>,
+    config: &Arc<Mutex<Config>>,
+) -> tray_icon::TrayIcon {
+    let icon = load_icon();
+    let cfg = config.lock().unwrap();
+    let paired = cfg.paired;
+    drop(cfg);
+
+    let menu = build_menu(proxy.clone(), config);
 
     let tooltip = if paired {
         "juicebox-plus \u{2014} Paired"

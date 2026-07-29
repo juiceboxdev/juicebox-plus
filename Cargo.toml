@@ -25,7 +25,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2"
 tinyfiledialogs = "3"
-arboard = "3"
+arboard = { version = "3", features = ["wayland-data-control"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 

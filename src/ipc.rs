@@ -242,13 +242,7 @@ pub async fn app_upload(
     let mime_type = guess_mime(&file_name);
 
     let cfg = crate::config::Config::load();
-    let instance = cfg
-        .app_upload_instance
-        .as_deref()
-        .filter(|s| !s.is_empty())
-        .unwrap_or(&cfg.juicebox_instance)
-        .trim_end_matches('/')
-        .to_string();
+    let instance = cfg.juicebox_instance.trim_end_matches('/').to_string();
 
     let client = reqwest::Client::new();
 
@@ -258,6 +252,7 @@ pub async fn app_upload(
         "mime_type": mime_type,
         "file_size": file_size,
         "ttl_hours": ttl_hours,
+        "host": cfg.storage_host,
     });
 
     let reserve_resp = client

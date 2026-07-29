@@ -10,13 +10,12 @@ use crate::pairing;
 use crate::tray;
 
 pub const SETTING_LABELS: &[(&str, &str)] = &[
-    ("daemon_address", "Daemon Address"),
     ("juicebox_instance", "Juicebox Instance"),
+    ("storage_host", "Juicehost Instance"),
+    ("upload_ttl_hours", "Retention time"),
+    ("daemon_address", "Daemon Address"),
     ("chunk_size_bytes", "Chunk Size (bytes)"),
     ("pairing_timeout_secs", "Pairing Timeout (secs)"),
-    ("upload_ttl_hours", "Upload TTL (hours)"),
-    ("app_upload_instance", "App Upload Instance"),
-    ("log_level", "Log Level"),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,6 +46,7 @@ pub enum TrayAction {
     ToggleFec,
     SetCompressionMode(String),
     Setting(String),
+    SetLogLevel(String),
     DeviceConnected,
     DeviceDisconnected,
     UploadFile,
@@ -209,6 +209,16 @@ impl App {
                 drop(cfg);
                 tracing::info!("Compression mode set to {mode}");
                 notify("juicebox-plus", &format!("Compression: {mode}"));
+                self.rebuild_tray();
+            }
+            TrayAction::SetLogLevel(level) => {
+                let mut cfg = self.config.lock().unwrap();
+                cfg.log_level = level.clone();
+                let _ = cfg.save();
+                drop(cfg);
+                tracing::info!("Log level set to {level}");
+                notify("juicebox-plus", &format!("Log level: {level}"));
+                self.rebuild_tray();
             }
             TrayAction::Setting(key) => {
                 let label = SETTING_LABELS
@@ -251,27 +261,97 @@ impl App {
                             }
 
                             let current = config.lock().unwrap().upload_ttl_hours;
-                            let mut msg = String::from("Available TTLs:\n");
-                            msg.push_str("  default (Server default)\n");
+                            let current_label = current.map(|v| {
+                                if v == 1.0 { "1 hour".to_string() } else { format!("{} hours", v) }
+                            }).unwrap_or_else(|| "default".to_string());
+
+                            let mut args: Vec<String> = vec![
+                                "--list".into(),
+                                "--radiolist".into(),
+                                "--title=Retention time".into(),
+                                "--text=Choose retention time:".into(),
+                                "--column=Pick".into(),
+                                "--column=Option".into(),
+                                "--print-column=2".into(),
+                                "--width=300".into(),
+                                "--height=250".into(),
+                            ];
+
                             for h in &allowed_ttls {
-                                if *h == 1.0 {
-                                    msg.push_str("  1\n");
-                                } else {
-                                    msg.push_str(&format!("  {h}\n"));
+                                let label = if *h == 1.0 { "1 hour".to_string() } else { format!("{} hours", h) };
+                                let selected = label == current_label;
+                                args.push(if selected { "TRUE".into() } else { "FALSE".into() });
+                                args.push(label);
+                            }
+
+                            let default_selected = current_label == "default";
+                            args.push(if default_selected { "TRUE".into() } else { "FALSE".into() });
+                            args.push("default".into());
+
+                            let output = std::process::Command::new("zenity")
+                                .args(&args)
+                                .output();
+
+                            if let Ok(out) = output {
+                                if out.status.success() {
+                                    let new_val = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                                    if !new_val.is_empty() {
+                                        let value = if new_val == "default" {
+                                            "default".to_string()
+                                        } else {
+                                            new_val.split_whitespace().next().unwrap_or(&new_val).to_string()
+                                        };
+                                        let current_text = current.map(|v| v.to_string()).unwrap_or_else(|| "default".to_string());
+                                        if value != current_text {
+                                            let mut cfg = config.lock().unwrap();
+                                            if cfg.update("upload_ttl_hours", &value).is_ok() {
+                                                notify("juicebox-plus", &format!("Retention time updated to {value}"));
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            msg.push_str("\nEnter a number (hours) or \"default\":");
+                        });
+                    });
+                } else if key == "storage_host" {
+                    let config = Arc::clone(&self.config);
+                    std::thread::spawn(move || {
+                        let rt = match tokio::runtime::Runtime::new() {
+                            Ok(rt) => rt,
+                            Err(e) => {
+                                tracing::error!("Failed to create tokio runtime: {e}");
+                                return;
+                            }
+                        };
+                        rt.block_on(async {
+                            let instance = config.lock().unwrap().juicebox_instance.clone();
+                            let instance = instance.trim_end_matches('/').to_string();
+                            let api_url = format!("{instance}/api/config");
 
-                            let current_text = current.map(|v| v.to_string()).unwrap_or_else(|| "default".to_string());
+                            let mut default_host = String::new();
+
+                            if let Ok(resp) = reqwest::get(&api_url).await {
+                                if resp.status().is_success() {
+                                    if let Ok(cfg) = resp.json::<serde_json::Value>().await {
+                                        if let Some(url) = cfg.get("juicehost_url").and_then(|v| v.as_str()) {
+                                            default_host = url.to_string();
+                                        }
+                                    }
+                                }
+                            }
+
+                            let current = config.lock().unwrap().current_value("storage_host");
+                            let default_text = if default_host.is_empty() { current.clone() } else { default_host };
+
                             if let Some(new_val) = tinyfiledialogs::input_box(
-                                "Upload TTL",
-                                &msg,
-                                &current_text,
+                                "Juicehost Instance",
+                                &format!("Enter Juicehost URL (leave empty to use server default)\n\nCurrent: {current}\nServer default: {default_text}"),
+                                &default_text,
                             ) {
-                                if new_val != current_text {
+                                if new_val != current {
                                     let mut cfg = config.lock().unwrap();
-                                    if cfg.update("upload_ttl_hours", &new_val).is_ok() {
-                                        notify("juicebox-plus", &format!("Upload TTL updated to {new_val}"));
+                                    if cfg.update("storage_host", &new_val).is_ok() {
+                                        notify("juicebox-plus", &format!("Juicehost Instance updated"));
                                     }
                                 }
                             }
@@ -411,7 +491,8 @@ impl App {
                                     }
                                 }
                                 Err(e) => {
-                                    notify("juicebox-plus", &format!("No file found in clipboard: {e}"));
+                                    tracing::warn!("Clipboard image+text both failed: {e}");
+                                    notify("juicebox-plus", "No image or text found in clipboard. Try copying a file path (Ctrl+C on a file) or an image.");
                                     return;
                                 }
                             }
@@ -483,10 +564,10 @@ impl App {
     fn rebuild_tray(&mut self) {
         let proxy = self.proxy.clone();
         let config = Arc::clone(&self.config);
-        if let Some(old) = self.tray_icon.take() {
-            drop(old);
+        let menu = tray::build_menu(proxy, &config);
+        if let Some(ref icon) = self.tray_icon {
+            icon.set_menu(Some(Box::new(menu)));
         }
-        self.tray_icon = Some(tray::create_tray_icon(proxy, &config));
     }
 }
 
