@@ -237,7 +237,7 @@ mod platform {
                         }
                         if let Ok(user_input) = args.UserInput() {
                             if let Ok(code) = user_input.Lookup(&HSTRING::from("pairingCode")) {
-                                if let Ok(hstr) = code.try_into::<HSTRING>() {
+                                if let Ok(hstr) = code.try_into() {
                                     let s: String = hstr.to_string();
                                     if !s.trim().is_empty() {
                                         *reply_activated.lock().unwrap() = Some(s);

@@ -33,7 +33,7 @@ notify-rust = "4"
 zbus = "5"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58", features = [
+windows = { version = "0.61", features = [
     "Data_Xml_Dom",
     "UI_Notifications",
     "Foundation",
