@@ -80,3 +80,29 @@ jobs:
         with:
           name: juicebox-plus-windows-setup
           path: packaging/windows/juicebox-plus-setup-*.exe
+
+  continuous-release:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: juicebox-plus-ubuntu-latest
+          path: staging
+
+      - name: Rename binary
+        run: cp staging/juicebox-plus staging/juicebox-plus-linux
+
+      - name: Upload to continuous release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: continuous
+          allowUpdates: true
+          omitBodyDuringUpdate: true
+          omitNameDuringUpdate: true
+          replacesArtifacts: true
+          artifacts: staging/juicebox-plus-linux

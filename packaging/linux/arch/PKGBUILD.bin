@@ -2,7 +2,7 @@
 # Contributor: JuiceyDev <me@juicey.dev>
 
 pkgname=juicebox2-plus-git-bin
-pkgver=0.0.0
+pkgver=REPLACE_ME
 pkgrel=1
 pkgdesc='The companion app for juicebox! (binary release)'
 arch=('x86_64')
@@ -12,17 +12,12 @@ depends=('gtk3' 'libappindicator-gtk3' 'libdbus' 'libxdo' 'glibc')
 provides=('juicebox2-plus')
 conflicts=('juicebox2-plus')
 source=(
-  "https://github.com/juiceboxdev/juicebox-plus/releases/download/v$pkgver/juicebox-plus-linux"
+  "https://github.com/juiceboxdev/juicebox-plus/releases/download/continuous/juicebox-plus-linux"
   "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/packaging/linux/juicebox-plus.desktop"
   "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/assets/logo.png"
   "https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/LICENSE"
 )
 md5sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
-
-pkgver() {
-  curl -s https://api.github.com/repos/juiceboxdev/juicebox-plus/releases/latest \
-    | grep '"tag_name":' | sed 's/.*"v//; s/".*//'
-}
 
 package() {
   install -Dm755 "juicebox-plus-linux" "$pkgdir/usr/bin/juicebox-plus"
