@@ -25,26 +25,24 @@ jobs:
           rm -rf aur-push && mkdir aur-push && cd aur-push
 
           cp "$GITHUB_WORKSPACE/packaging/linux/arch/PKGBUILD" .
+          source PKGBUILD
 
-          echo 'pkgbase = juicebox2-plus-git' > .SRCINFO
-          echo '  pkgdesc = The companion app for juicebox!' >> .SRCINFO
-          echo '  pkgver = r0.0000000' >> .SRCINFO
-          echo '  pkgrel = 1' >> .SRCINFO
-          echo '  url = https://github.com/juiceboxdev/juicebox-plus' >> .SRCINFO
-          echo '  arch = x86_64' >> .SRCINFO
-          echo '  license = LGPL-3.0-or-later' >> .SRCINFO
-          echo '  makedepends = git' >> .SRCINFO
-          echo '  makedepends = cargo' >> .SRCINFO
-          echo '  depends = gtk3' >> .SRCINFO
-          echo '  depends = libappindicator-gtk3' >> .SRCINFO
-          echo '  depends = libdbus' >> .SRCINFO
-          echo '  depends = libxdo' >> .SRCINFO
-          echo '  depends = glibc' >> .SRCINFO
-          echo '  provides = juicebox2-plus' >> .SRCINFO
-          echo '  conflicts = juicebox2-plus' >> .SRCINFO
-          echo '  source = git+https://github.com/juiceboxdev/juicebox-plus.git' >> .SRCINFO
-          echo '  md5sums = SKIP' >> .SRCINFO
-          echo 'pkgname = juicebox2-plus-git' >> .SRCINFO
+          {
+            echo "pkgbase = $pkgname"
+            echo "  pkgdesc = $pkgdesc"
+            echo "  pkgver = $pkgver"
+            echo "  pkgrel = $pkgrel"
+            echo "  url = $url"
+            for a in "${arch[@]}"; do echo "  arch = $a"; done
+            echo "  license = $license"
+            for d in "${depends[@]}"; do echo "  depends = $d"; done
+            for d in "${makedepends[@]}"; do echo "  makedepends = $d"; done
+            echo "  provides = $provides"
+            echo "  conflicts = $conflicts"
+            for s in "${source[@]}"; do echo "  source = $s"; done
+            for m in "${md5sums[@]}"; do echo "  md5sums = $m"; done
+            echo "pkgname = $pkgname"
+          } > .SRCINFO
 
           git init
           git config user.name "JuiceyDev"
@@ -75,30 +73,23 @@ jobs:
 
           cp "$GITHUB_WORKSPACE/packaging/linux/arch/PKGBUILD.bin" PKGBUILD
           sed -i "s/^pkgver=0\\.0\\.0/pkgver=$version/" PKGBUILD
+          source PKGBUILD
 
-          echo 'pkgbase = juicebox2-plus-bin' > .SRCINFO
-          echo '  pkgdesc = The companion app for juicebox! (binary release)' >> .SRCINFO
-          echo "  pkgver = $version" >> .SRCINFO
-          echo '  pkgrel = 1' >> .SRCINFO
-          echo '  url = https://github.com/juiceboxdev/juicebox-plus' >> .SRCINFO
-          echo '  arch = x86_64' >> .SRCINFO
-          echo '  license = LGPL-3.0-or-later' >> .SRCINFO
-          echo '  depends = gtk3' >> .SRCINFO
-          echo '  depends = libappindicator-gtk3' >> .SRCINFO
-          echo '  depends = libdbus' >> .SRCINFO
-          echo '  depends = libxdo' >> .SRCINFO
-          echo '  depends = glibc' >> .SRCINFO
-          echo '  provides = juicebox2-plus' >> .SRCINFO
-          echo '  conflicts = juicebox2-plus' >> .SRCINFO
-          echo "  source = https://github.com/juiceboxdev/juicebox-plus/releases/download/${GITHUB_REF_NAME}/juicebox-plus-linux" >> .SRCINFO
-          echo '  source = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/packaging/linux/juicebox-plus.desktop' >> .SRCINFO
-          echo '  source = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/assets/logo.png' >> .SRCINFO
-          echo '  source = https://raw.githubusercontent.com/juiceboxdev/juicebox-plus/main/LICENSE' >> .SRCINFO
-          echo '  md5sums = SKIP' >> .SRCINFO
-          echo '  md5sums = SKIP' >> .SRCINFO
-          echo '  md5sums = SKIP' >> .SRCINFO
-          echo '  md5sums = SKIP' >> .SRCINFO
-          echo 'pkgname = juicebox2-plus-bin' >> .SRCINFO
+          {
+            echo "pkgbase = $pkgname"
+            echo "  pkgdesc = $pkgdesc"
+            echo "  pkgver = $pkgver"
+            echo "  pkgrel = $pkgrel"
+            echo "  url = $url"
+            for a in "${arch[@]}"; do echo "  arch = $a"; done
+            echo "  license = $license"
+            for d in "${depends[@]}"; do echo "  depends = $d"; done
+            echo "  provides = $provides"
+            echo "  conflicts = $conflicts"
+            for s in "${source[@]}"; do echo "  source = $s"; done
+            for m in "${md5sums[@]}"; do echo "  md5sums = $m"; done
+            echo "pkgname = $pkgname"
+          } > .SRCINFO
 
           git init
           git config user.name "JuiceyDev"
