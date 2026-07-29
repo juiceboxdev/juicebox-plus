@@ -55,6 +55,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - uses: actions/download-artifact@v4
         with:
           name: juicebox-plus-windows-latest
