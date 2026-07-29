@@ -26,7 +26,6 @@ Name: "nl"; MessagesFile: "compiler:Languages\Dutch.isl"
 Name: "pl"; MessagesFile: "compiler:Languages\Polish.isl"
 Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "ja"; MessagesFile: "compiler:Languages\Japanese.isl"
-Name: "zh_CN"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [Tasks]
 Name: startup; Description: "Launch Juicebox Plus on startup"; GroupDescription: "Startup options:"
