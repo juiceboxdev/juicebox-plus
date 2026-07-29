@@ -50,6 +50,8 @@ jobs:
           git add -A
           git commit -m "aur update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           git remote add aur ssh://aur@aur.archlinux.org/juicebox2-plus-git.git
+          GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git fetch aur master 2>/dev/null || true
+          GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git rebase aur/master 2>/dev/null || true
           GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git push aur master
 
   deploy-bin:
@@ -97,4 +99,6 @@ jobs:
           git add -A
           git commit -m "aur update v$version ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
           git remote add aur ssh://aur@aur.archlinux.org/juicebox2-plus-bin.git
+          GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git fetch aur master 2>/dev/null || true
+          GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git rebase aur/master 2>/dev/null || true
           GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git push aur master
