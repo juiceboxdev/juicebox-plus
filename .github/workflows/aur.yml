@@ -1,0 +1,31 @@
+name: AUR
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write SSH key
+        run: |
+          mkdir -p /dev/shm
+          echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > /dev/shm/aur-key
+          chmod 600 /dev/shm/aur-key
+
+      - name: Publish to AUR
+        run: |
+          mkdir aur-pkg
+          cp packaging/linux/arch/PKGBUILD aur-pkg/
+          cd aur-pkg
+          makepkg --printsrcinfo > .SRCINFO
+          git init
+          git config user.name "JuiceyDev"
+          git config user.email "me@juicey.dev"
+          git add -A
+          git commit -m "aur update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git remote add aur ssh://aur@aur.archlinux.org/juicebox-plus-git.git
+          GIT_SSH_COMMAND="ssh -i /dev/shm/aur-key -o StrictHostKeyChecking=accept-new" git push aur master
