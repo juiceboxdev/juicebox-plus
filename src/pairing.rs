@@ -172,9 +172,9 @@ mod platform {
 mod platform {
     use std::sync::{Arc, Mutex};
 
-    use windows::core::{IInspectable, HSTRING, Interface};
+    use windows::core::{IInspectable, Interface, HSTRING};
     use windows::Data::Xml::Dom::XmlDocument;
-    use windows::Foundation::TypedEventHandler;
+    use windows::Foundation::{IPropertyValue, TypedEventHandler};
     use windows::UI::Notifications::{
         ToastActivatedEventArgs, ToastDismissedEventArgs, ToastNotification,
         ToastNotificationManager,
@@ -221,24 +221,24 @@ mod platform {
         let reply_activated = reply.clone();
 
         let activated_handler = TypedEventHandler::<ToastNotification, IInspectable>::new(
-            move |_sender: &Option<ToastNotification>, args: &Option<IInspectable>| {
-                if let Some(inspectable) = args {
-                    if let Ok(args) = inspectable.cast::<ToastActivatedEventArgs>() {
-                        if let Ok(arguments) = args.Arguments() {
-                            let arguments_str = arguments.to_string();
-                            if arguments_str.contains("action=gui") {
-                                let result = tinyfiledialogs::input_box(
-                                    "juicebox-plus Pair Device",
-                                    "Enter pairing code (XXXX-XXXX):",
-                                    "",
-                                );
-                                *reply_activated.lock().unwrap() = result;
-                                return Ok(());
-                            }
+            move |_sender: windows_core::Ref<'_, ToastNotification>, args: windows_core::Ref<'_, IInspectable>| {
+                if let Ok(args) = args.cast::<ToastActivatedEventArgs>() {
+                    if let Ok(arguments) = args.Arguments() {
+                        let arguments_str = arguments.to_string();
+                        if arguments_str.contains("action=gui") {
+                            let result = tinyfiledialogs::input_box(
+                                "juicebox-plus Pair Device",
+                                "Enter pairing code (XXXX-XXXX):",
+                                "",
+                            );
+                            *reply_activated.lock().unwrap() = result;
+                            return Ok(());
                         }
-                        if let Ok(user_input) = args.UserInput() {
-                            if let Ok(code) = user_input.Lookup(&HSTRING::from("pairingCode")) {
-                                if let Ok(hstr) = TryInto::<HSTRING>::try_into(code) {
+                    }
+                    if let Ok(user_input) = args.UserInput() {
+                        if let Ok(code) = user_input.Lookup(&HSTRING::from("pairingCode")) {
+                            if let Ok(prop) = code.cast::<IPropertyValue>() {
+                                if let Ok(hstr) = prop.GetString() {
                                     let s: String = hstr.to_string();
                                     if !s.trim().is_empty() {
                                         *reply_activated.lock().unwrap() = Some(s);
@@ -254,7 +254,7 @@ mod platform {
         let _ = notification.Activated(&activated_handler);
 
         let dismissed_handler = TypedEventHandler::<ToastNotification, ToastDismissedEventArgs>::new(
-            move |_sender: &Option<ToastNotification>, _args: &Option<ToastDismissedEventArgs>| {
+            move |_sender: windows_core::Ref<'_, ToastNotification>, _args: windows_core::Ref<'_, ToastDismissedEventArgs>| {
                 Ok(())
             },
         );
