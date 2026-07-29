@@ -172,7 +172,7 @@ mod platform {
 mod platform {
     use std::sync::{Arc, Mutex};
 
-    use windows::core::{IInspectable, Interface, HSTRING};
+    use windows::core::{IInspectable, Interface, HSTRING, Ref};
     use windows::Data::Xml::Dom::XmlDocument;
     use windows::Foundation::{IPropertyValue, TypedEventHandler};
     use windows::UI::Notifications::{
@@ -250,7 +250,6 @@ mod platform {
                             }
                         }
                     }
-                }
                 Ok(())
             },
         );
