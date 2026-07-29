@@ -222,7 +222,7 @@ mod platform {
 
         let activated_handler = TypedEventHandler::<ToastNotification, IInspectable>::new(
             move |_sender: ::windows::core::Ref<'_, ToastNotification>, args: ::windows::core::Ref<'_, IInspectable>| {
-                if let Ok(args) = args.cast::<ToastActivatedEventArgs>() {
+                if let Ok(args) = (&*args).cast::<ToastActivatedEventArgs>() {
                     if let Ok(arguments) = args.Arguments() {
                         let arguments_str = arguments.to_string();
                         if arguments_str.contains("action=gui") {
