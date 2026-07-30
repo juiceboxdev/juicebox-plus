@@ -1,5 +1,6 @@
 mod config;
 mod device_ws;
+mod dialogs;
 mod ipc;
 mod pairing;
 mod progress;
@@ -54,6 +55,7 @@ fn main() {
 
     event_loop.run(move |event, elwt, control_flow| {
         *control_flow = ControlFlow::Wait;
+
         app.handle_event(&event, elwt);
     });
 }

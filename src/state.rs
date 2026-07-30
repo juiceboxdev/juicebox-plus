@@ -261,53 +261,38 @@ impl App {
                             }
 
                             let current = config.lock().unwrap().upload_ttl_hours;
-                            let current_label = current.map(|v| {
-                                if v == 1.0 { "1 hour".to_string() } else { format!("{} hours", v) }
-                            }).unwrap_or_else(|| "default".to_string());
+                            let current_label = current
+                                .map(|v| crate::dialogs::format_duration(v))
+                                .unwrap_or_else(|| "default".to_string());
 
-                            let mut args: Vec<String> = vec![
-                                "--list".into(),
-                                "--radiolist".into(),
-                                "--title=Retention time".into(),
-                                "--text=Choose retention time:".into(),
-                                "--column=Pick".into(),
-                                "--column=Option".into(),
-                                "--print-column=2".into(),
-                                "--width=300".into(),
-                                "--height=250".into(),
-                            ];
+                            let mut options: Vec<String> = allowed_ttls
+                                .iter()
+                                .map(|h| crate::dialogs::format_duration(*h))
+                                .collect();
+                            options.push("default".to_string());
 
-                            for h in &allowed_ttls {
-                                let label = if *h == 1.0 { "1 hour".to_string() } else { format!("{} hours", h) };
-                                let selected = label == current_label;
-                                args.push(if selected { "TRUE".into() } else { "FALSE".into() });
-                                args.push(label);
-                            }
+                            let selected = crate::dialogs::select_list(
+                                "Retention time",
+                                "Choose retention time:",
+                                &options,
+                                Some(&current_label),
+                            );
 
-                            let default_selected = current_label == "default";
-                            args.push(if default_selected { "TRUE".into() } else { "FALSE".into() });
-                            args.push("default".into());
-
-                            let output = std::process::Command::new("zenity")
-                                .args(&args)
-                                .output();
-
-                            if let Ok(out) = output {
-                                if out.status.success() {
-                                    let new_val = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                                    if !new_val.is_empty() {
-                                        let value = if new_val == "default" {
-                                            "default".to_string()
-                                        } else {
-                                            new_val.split_whitespace().next().unwrap_or(&new_val).to_string()
-                                        };
-                                        let current_text = current.map(|v| v.to_string()).unwrap_or_else(|| "default".to_string());
-                                        if value != current_text {
-                                            let mut cfg = config.lock().unwrap();
-                                            if cfg.update("upload_ttl_hours", &value).is_ok() {
-                                                notify("juicebox-plus", &format!("Retention time updated to {value}"));
-                                            }
-                                        }
+                            if let Some(new_val) = selected {
+                                let value = if new_val == "default" {
+                                    "default".to_string()
+                                } else {
+                                    crate::dialogs::parse_duration(&new_val)
+                                        .map(|v| v.to_string())
+                                        .unwrap_or(new_val)
+                                };
+                                let current_text = current
+                                    .map(|v| v.to_string())
+                                    .unwrap_or_else(|| "default".to_string());
+                                if value != current_text {
+                                    let mut cfg = config.lock().unwrap();
+                                    if cfg.update("upload_ttl_hours", &value).is_ok() {
+                                        notify("juicebox-plus", &format!("Retention time updated to {value}"));
                                     }
                                 }
                             }
@@ -343,7 +328,7 @@ impl App {
                             let current = config.lock().unwrap().current_value("storage_host");
                             let default_text = if default_host.is_empty() { current.clone() } else { default_host };
 
-                            if let Some(new_val) = tinyfiledialogs::input_box(
+                            if let Some(new_val) = crate::dialogs::input_dialog(
                                 "Juicehost Instance",
                                 &format!("Enter Juicehost URL (leave empty to use server default)\n\nCurrent: {current}\nServer default: {default_text}"),
                                 &default_text,
@@ -360,7 +345,7 @@ impl App {
                 } else {
                     let current = self.config.lock().unwrap().current_value(&key);
 
-                    if let Some(new_val) = tinyfiledialogs::input_box(
+                    if let Some(new_val) = crate::dialogs::input_dialog(
                         "juicebox-plus Settings",
                         &format!("{label}\n\nCurrent: {current}"),
                         &current,
@@ -387,10 +372,8 @@ impl App {
                 }
                 let proxy = self.proxy.clone();
                 std::thread::spawn(move || {
-                    let files = tinyfiledialogs::open_file_dialog_multi(
+                    let files = crate::dialogs::open_files_dialog(
                         "Select files to upload",
-                        "",
-                        None,
                     );
                     let files = match files {
                         Some(f) if !f.is_empty() => f,

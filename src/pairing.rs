@@ -60,7 +60,7 @@ mod platform {
     }
 
     fn open_gui_dialog() -> Option<String> {
-        tinyfiledialogs::input_box(
+        crate::dialogs::input_dialog(
             "juicebox-plus Pair Device",
             "Enter pairing code (XXXX-XXXX):",
             "",
@@ -179,8 +179,175 @@ mod platform {
         ToastActivatedEventArgs, ToastDismissedEventArgs, ToastNotification,
         ToastNotificationManager,
     };
+    use windows::Win32::Foundation::*;
+    use windows::Win32::UI::WindowsAndMessaging::*;
 
     use crate::config::Config;
+
+    fn windows_input_dialog(title: &str, prompt: &str, default: &str) -> Option<String> {
+        unsafe {
+            let title_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+            let prompt_wide: Vec<u16> = prompt.encode_utf16().chain(std::iter::once(0)).collect();
+            let default_wide: Vec<u16> =
+                default.encode_utf16().chain(std::iter::once(0)).collect();
+            let static_class: Vec<u16> = "STATIC\0".encode_utf16().collect();
+            let edit_class: Vec<u16> = "EDIT\0".encode_utf16().collect();
+            let button_class: Vec<u16> = "BUTTON\0".encode_utf16().collect();
+
+            let class_name: Vec<u16> = "JuiceboxPlusInputDlg\0".encode_utf16().collect();
+            let instance = GetModuleHandleW(None).unwrap_or_default();
+
+            extern "system" fn dlg_proc(
+                hwnd: HWND,
+                msg: u32,
+                wparam: WPARAM,
+                lparam: LPARAM,
+            ) -> LRESULT {
+                unsafe {
+                    match msg {
+                        WM_COMMAND => {
+                            let id = LOWORD(wparam.0 as u32) as u32;
+                            if id == 2 {
+                                let edit = GetDlgItem(hwnd, 101);
+                                let len = SendMessageW(edit, WM_GETTEXTLENGTH, WPARAM(0), LPARAM(0));
+                                let mut buf = vec![0u16; len.0 as usize + 1];
+                                SendMessageW(
+                                    edit,
+                                    WM_GETTEXT,
+                                    WPARAM(buf.len() as u64),
+                                    LPARAM(buf.as_mut_ptr() as isize),
+                                );
+                                let text = String::from_utf16_lossy(&buf[..len.0 as usize]);
+                                SetWindowLongPtrW(hwnd, GWLP_USERDATA, Box::into_raw(Box::new(text)) as isize);
+                                DestroyWindow(hwnd);
+                            } else if id == 1 {
+                                SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+                                DestroyWindow(hwnd);
+                            }
+                        }
+                        WM_DESTROY => {
+                            PostQuitMessage(0);
+                        }
+                        _ => return DefWindowProcW(hwnd, msg, wparam, lparam),
+                    }
+                    LRESULT(0)
+                }
+            }
+
+            let wc = WNDCLASSW {
+                style: CS_HREDRAW | CS_VREDRAW,
+                lpfnWndProc: Some(dlg_proc),
+                hInstance: instance,
+                hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
+                hbrBackground: HBRUSH((COLOR_BTNFACE + 1) as isize),
+                lpszClassName: windows::core::PCWSTR::from_raw(class_name.as_ptr()),
+                ..Default::default()
+            };
+            RegisterClassW(&wc);
+
+            let hwnd = CreateWindowExW(
+                WINDOW_EX_STYLE(WS_EX_DLGMODALFRAME),
+                windows::core::PCWSTR::from_raw(class_name.as_ptr()),
+                windows::core::PCWSTR::from_raw(title_wide.as_ptr()),
+                WINDOW_STYLE(WS_CAPTION | WS_SYSMENU | WS_VISIBLE),
+                200,
+                200,
+                380,
+                180,
+                None,
+                None,
+                instance,
+                None,
+            );
+            if hwnd == HWND(0) {
+                return None;
+            }
+
+            CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                windows::core::PCWSTR::from_raw(static_class.as_ptr()),
+                windows::core::PCWSTR::from_raw(prompt_wide.as_ptr()),
+                WINDOW_STYLE(WS_CHILD | WS_VISIBLE | SS_LEFT),
+                10,
+                10,
+                340,
+                20,
+                hwnd,
+                Some(HMENU(3)),
+                instance,
+                None,
+            );
+
+            let edit = CreateWindowExW(
+                WINDOW_EX_STYLE(WS_EX_CLIENTEDGE),
+                windows::core::PCWSTR::from_raw(edit_class.as_ptr()),
+                windows::core::PCWSTR::from_raw(default_wide.as_ptr()),
+                WINDOW_STYLE(WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL),
+                10,
+                40,
+                340,
+                24,
+                hwnd,
+                Some(HMENU(101)),
+                instance,
+                None,
+            );
+
+            CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                windows::core::PCWSTR::from_raw(button_class.as_ptr()),
+                windows::core::PCWSTR::from_raw(windows::core::HSTRING::from("Cancel").as_ptr() as *const u16),
+                WINDOW_STYLE(WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON),
+                260,
+                80,
+                90,
+                28,
+                hwnd,
+                Some(HMENU(1)),
+                instance,
+                None,
+            );
+
+            CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                windows::core::PCWSTR::from_raw(button_class.as_ptr()),
+                windows::core::PCWSTR::from_raw(
+                    windows::core::HSTRING::from("OK").as_ptr() as *const u16,
+                ),
+                WINDOW_STYLE(WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON),
+                160,
+                80,
+                90,
+                28,
+                hwnd,
+                Some(HMENU(2)),
+                instance,
+                None,
+            );
+
+            SetFocus(edit);
+
+            let mut msg = MSG::default();
+            let result = loop {
+                let ret = GetMessageW(&mut msg, None, 0, 0);
+                if !ret.as_bool() {
+                    break None;
+                }
+                if !IsDialogMessageW(hwnd, &msg).as_bool() {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+                if msg.message == WM_DESTROY || msg.message == WM_QUIT {
+                    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+                    if ptr != 0 {
+                        break Some(*Box::from_raw(ptr as *mut String));
+                    }
+                    break None;
+                }
+            };
+            result
+        }
+    }
 
     pub fn prompt_and_validate(
         config: Arc<Config>,
@@ -227,7 +394,7 @@ mod platform {
                         if let Ok(arguments) = args.Arguments() {
                             let arguments_str = arguments.to_string();
                             if arguments_str.contains("action=gui") {
-                                let result = tinyfiledialogs::input_box(
+                                let result = windows_input_dialog(
                                     "juicebox-plus Pair Device",
                                     "Enter pairing code (XXXX-XXXX):",
                                     "",

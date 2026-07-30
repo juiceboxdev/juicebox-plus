@@ -177,7 +177,7 @@ async fn handle_message(
     proxy: &tao::event_loop::EventLoopProxy<TrayAction>,
     juiceback_instance: &str,
     write: &mut WsWriter,
-) {
+) -> bool {
     let msg_type = msg.get("type").and_then(|t| t.as_str()).unwrap_or("");
     match msg_type {
         "auth_ok" => {
@@ -218,26 +218,25 @@ async fn handle_message(
             tracing::info!("Upload request received: file_id={file_id} filename={filename}");
 
             // Open file picker to select the local file
-            let file_path =
-                match tinyfiledialogs::open_file_dialog("Select file to upload", filename, None) {
-                    Some(path) => path,
-                    None => {
-                        tracing::info!("File selection cancelled by user");
-                        let cancel_msg = serde_json::json!({
-                            "type": "upload_cancelled",
-                            "file_id": file_id,
-                        });
-                        if let Err(e) = write
-                            .send(tokio_tungstenite::tungstenite::Message::Text(
-                                cancel_msg.to_string().into(),
-                            ))
-                            .await
-                        {
-                            tracing::warn!("Failed to send upload_cancelled: {e}");
-                        }
-                        return;
+            let file_path = match crate::dialogs::open_file_dialog("Select file to upload", filename) {
+                Some(path) => path,
+                None => {
+                    tracing::info!("File selection cancelled by user");
+                    let cancel_msg = serde_json::json!({
+                        "type": "upload_cancelled",
+                        "file_id": file_id,
+                    });
+                    if let Err(e) = write
+                        .send(tokio_tungstenite::tungstenite::Message::Text(
+                            cancel_msg.to_string().into(),
+                        ))
+                        .await
+                    {
+                        tracing::warn!("Failed to send upload_cancelled: {e}");
                     }
-                };
+                    return true;
+                }
+            };
 
             let proxy_clone = proxy.clone();
             let file_id_owned = file_id.to_string();
@@ -289,6 +288,7 @@ async fn handle_message(
             tracing::debug!("Unknown message type: {msg_type}");
         }
     }
+    true
 }
 
 /// Figure out if the WS error means we're unpaired or just offline.

@@ -24,7 +24,6 @@ gethostname = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2"
-tinyfiledialogs = "3"
 arboard = { version = "3", features = ["wayland-data-control"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
@@ -39,6 +38,7 @@ windows = { version = "0.61", features = [
     "UI_Notifications",
     "Foundation",
     "Foundation_Collections",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -46,8 +46,8 @@ mac-notification-sys = "0.6"
 
 [package.metadata.deb]
 maintainer = "JuiceyDev"
-copyright = "2024 JuiceyDev"
-depends = "libgtk-3-0, libappindicator3-1, libdbus-1-3"
+copyright = "JuiceyDev"
+depends = "zenity, libappindicator3-1, libdbus-1-3"
 section = "utils"
 priority = "optional"
 
