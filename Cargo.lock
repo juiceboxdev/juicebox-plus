@@ -2002,7 +2002,6 @@ dependencies = [
  "serde_json",
  "tao",
  "thiserror 2.0.19",
- "tinyfiledialogs",
  "tokio",
  "tokio-tungstenite",
  "toml 0.8.2",
@@ -2825,7 +2824,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.45.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4175,16 +4174,6 @@ name = "time-core"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e1c906769ad99c88eaa54e728060edef082f8e358ff32030cb7c7d315e81109"
-
-[[package]]
-name = "tinyfiledialogs"
-version = "3.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e25fa0bc43a6566e2cc6d7ac96df3fa5a57beba34445bead1b368ba8fe9ca568"
-dependencies = [
- "cc",
- "libc",
-]
 
 [[package]]
 name = "tinystr"

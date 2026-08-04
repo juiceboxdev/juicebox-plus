@@ -563,7 +563,46 @@ pub fn notify(summary: &str, body: &str) {
         .show();
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
+pub fn notify(_summary: &str, body: &str) {
+    use windows::core::HSTRING;
+    use windows::Data::Xml::Dom::XmlDocument;
+    use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
+
+    let toast_xml = format!(
+        r#"<toast>
+            <visual><binding template="ToastGeneric">
+                <text>juicebox-plus</text>
+                <text>{body}</text>
+            </binding></visual>
+        </toast>"#
+    );
+    if let Ok(doc) = XmlDocument::new() {
+        if doc.LoadXml(&HSTRING::from(&toast_xml)).is_ok() {
+            if let Ok(n) = ToastNotification::CreateToastNotification(&doc) {
+                if let Ok(nt) = ToastNotificationManager::CreateToastNotifierWithId(
+                    &HSTRING::from("juicebox-plus"),
+                ) {
+                    let _ = nt.Show(&n);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub fn notify(_summary: &str, body: &str) {
+    use mac_notification_sys::{send_notification, Notification};
+
+    let _ = send_notification(
+        "juicebox-plus",
+        None,
+        body,
+        Some(Notification::new().asynchronous(true)),
+    );
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
 pub fn notify(_summary: &str, body: &str) {
     tracing::info!("{body}");
 }
