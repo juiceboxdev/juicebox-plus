@@ -27,6 +27,9 @@ Name: "pl"; MessagesFile: "compiler:Languages\Polish.isl"
 Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "ja"; MessagesFile: "compiler:Languages\Japanese.isl"
 
+[Registry]
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\juicebox-plus"; ValueType: string; ValueName: "DisplayName"; ValueData: "Juicebox Plus"; Flags: uninsdeletekey
+
 [Tasks]
 Name: startup; Description: "Launch Juicebox Plus on startup"; GroupDescription: "Startup options:"
 

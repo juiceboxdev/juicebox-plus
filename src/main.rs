@@ -17,11 +17,34 @@ use tracing_subscriber::EnvFilter;
 
 #[cfg(target_os = "windows")]
 fn register_aumid() {
-    const APP_ID: &str = "juicebox-plus";
     use windows::core::HSTRING;
+    use windows::Win32::System::Registry::*;
     use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+
     unsafe {
-        let _ = SetCurrentProcessExplicitAppUserModelID(&HSTRING::from(APP_ID));
+        let _ = SetCurrentProcessExplicitAppUserModelID(&HSTRING::from("juicebox-plus"));
+
+        let mut hkey = HKEY::default();
+        let status = RegCreateKeyW(
+            HKEY_CURRENT_USER,
+            &HSTRING::from("Software\\Classes\\AppUserModelId\\juicebox-plus"),
+            &mut hkey,
+        );
+        if status.is_ok() {
+            let wide: Vec<u16> = "Juicebox Plus\0".encode_utf16().collect();
+            let bytes: Vec<u8> = wide
+                .iter()
+                .flat_map(|u| u.to_le_bytes())
+                .collect();
+            let _ = RegSetValueExW(
+                hkey,
+                &HSTRING::from("DisplayName"),
+                None,
+                REG_SZ,
+                Some(&bytes),
+            );
+            let _ = RegCloseKey(hkey);
+        }
     }
 }
 
