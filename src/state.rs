@@ -75,7 +75,8 @@ impl App {
 
     pub fn build_tray(&mut self, _event_loop: &EventLoopWindowTarget<TrayAction>) {
         let proxy = self.proxy.clone();
-        self.tray_icon = Some(tray::create_tray_icon(proxy, &self.config));
+        let status = self.status.clone();
+        self.tray_icon = Some(tray::create_tray_icon(proxy, &self.config, &status));
         tracing::info!("System tray icon created");
     }
 
@@ -130,6 +131,7 @@ impl App {
                     };
                     notify("juicebox-plus", "Upload resumed");
                 }
+                self.rebuild_tray();
             }
             TrayAction::ShowStatus => {
                 let msg = match &self.status {
@@ -547,7 +549,8 @@ impl App {
     fn rebuild_tray(&mut self) {
         let proxy = self.proxy.clone();
         let config = Arc::clone(&self.config);
-        let menu = tray::build_menu(proxy, &config);
+        let status = self.status.clone();
+        let menu = tray::build_menu(proxy, &config, &status);
         if let Some(ref icon) = self.tray_icon {
             icon.set_menu(Some(Box::new(menu)));
         }
