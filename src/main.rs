@@ -15,7 +15,21 @@ use std::sync::{Arc, Mutex};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
 use tracing_subscriber::EnvFilter;
 
+#[cfg(target_os = "windows")]
+fn register_aumid() {
+    const APP_ID: &str = "juicebox-plus";
+    use windows::core::HSTRING;
+    use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+    unsafe {
+        let _ = SetCurrentProcessExplicitAppUserModelID(&HSTRING::from(APP_ID));
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn register_aumid() {}
+
 fn main() {
+    register_aumid();
     let config = config::Config::load();
     let log_level = config.log_level.clone();
     let config = Arc::new(Mutex::new(config));
