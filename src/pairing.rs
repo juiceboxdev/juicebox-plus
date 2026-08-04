@@ -179,210 +179,8 @@ mod platform {
         ToastActivatedEventArgs, ToastDismissedEventArgs, ToastNotification,
         ToastNotificationManager,
     };
-    use windows::Win32::Foundation::*;
-    use windows::Win32::Graphics::Gdi::HBRUSH;
-    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-    use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
-    use windows::Win32::UI::WindowsAndMessaging::*;
 
     use crate::config::Config;
-
-    const COLOR_BTNFACE: i32 = 15;
-    const SS_LEFT: i32 = 0;
-
-    #[inline]
-    fn loword(val: u32) -> u16 {
-        val as u16
-    }
-
-    fn ws(style: i32) -> WINDOW_STYLE {
-        WINDOW_STYLE(style as u32)
-    }
-
-    fn exws(style: i32) -> WINDOW_EX_STYLE {
-        WINDOW_EX_STYLE(style as u32)
-    }
-
-    fn hmenu(id: usize) -> HMENU {
-        HMENU(id as *mut core::ffi::c_void)
-    }
-
-    fn windows_input_dialog(title: &str, prompt: &str, default: &str) -> Option<String> {
-        unsafe {
-            let title_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
-            let prompt_wide: Vec<u16> = prompt.encode_utf16().chain(std::iter::once(0)).collect();
-            let default_wide: Vec<u16> =
-                default.encode_utf16().chain(std::iter::once(0)).collect();
-            let static_class: Vec<u16> = "STATIC\0".encode_utf16().collect();
-            let edit_class: Vec<u16> = "EDIT\0".encode_utf16().collect();
-            let button_class: Vec<u16> = "BUTTON\0".encode_utf16().collect();
-
-            let class_name: Vec<u16> = "JuiceboxPlusInputDlg\0".encode_utf16().collect();
-            let instance = GetModuleHandleW(None).unwrap_or_default();
-
-            extern "system" fn dlg_proc(
-                hwnd: HWND,
-                msg: u32,
-                wparam: WPARAM,
-                lparam: LPARAM,
-            ) -> LRESULT {
-                unsafe {
-                    match msg {
-                        WM_COMMAND => {
-                            let id = loword(wparam.0 as u32) as u32;
-                            if id == 2 {
-                                let edit = GetDlgItem(Some(hwnd), 101).unwrap_or_default();
-                                let len =
-                                    SendMessageW(edit, WM_GETTEXTLENGTH, Some(WPARAM(0)), Some(LPARAM(0)));
-                                let mut buf = vec![0u16; len.0 as usize + 1];
-                                SendMessageW(
-                                    edit,
-                                    WM_GETTEXT,
-                                    Some(WPARAM(buf.len())),
-                                    Some(LPARAM(buf.as_mut_ptr() as isize)),
-                                );
-                                let text = String::from_utf16_lossy(&buf[..len.0 as usize]);
-                                SetWindowLongPtrW(hwnd, GWLP_USERDATA, Box::into_raw(Box::new(text)) as isize);
-                                let _ = DestroyWindow(hwnd);
-                            } else if id == 1 {
-                                SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-                                let _ = DestroyWindow(hwnd);
-                            }
-                        }
-                        WM_DESTROY => {
-                            PostQuitMessage(0);
-                        }
-                        _ => return DefWindowProcW(hwnd, msg, wparam, lparam),
-                    }
-                    LRESULT(0)
-                }
-            }
-
-            let hinst = HINSTANCE(instance.0);
-
-            let wc = WNDCLASSW {
-                style: CS_HREDRAW | CS_VREDRAW,
-                lpfnWndProc: Some(dlg_proc),
-                hInstance: hinst,
-                hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
-                hbrBackground: HBRUSH((COLOR_BTNFACE + 1) as *mut core::ffi::c_void),
-                lpszClassName: windows::core::PCWSTR::from_raw(class_name.as_ptr()),
-                ..Default::default()
-            };
-            let _ = RegisterClassW(&wc);
-
-            let hwnd = CreateWindowExW(
-                exws(WS_EX_DLGMODALFRAME.0 as i32),
-                windows::core::PCWSTR::from_raw(class_name.as_ptr()),
-                windows::core::PCWSTR::from_raw(title_wide.as_ptr()),
-                ws(WS_CAPTION.0 as i32 | WS_SYSMENU.0 as i32 | WS_VISIBLE.0 as i32),
-                200,
-                200,
-                380,
-                180,
-                None,
-                None,
-                Some(hinst),
-                None,
-            )
-            .ok();
-
-            let Some(hwnd) = hwnd else {
-                return None;
-            };
-
-            let _ = CreateWindowExW(
-                exws(0),
-                windows::core::PCWSTR::from_raw(static_class.as_ptr()),
-                windows::core::PCWSTR::from_raw(prompt_wide.as_ptr()),
-                ws(WS_CHILD.0 as i32 | WS_VISIBLE.0 as i32 | SS_LEFT),
-                10,
-                10,
-                340,
-                20,
-                Some(hwnd),
-                Some(hmenu(3)),
-                Some(hinst),
-                None,
-            );
-
-            let edit = CreateWindowExW(
-                exws(WS_EX_CLIENTEDGE.0 as i32),
-                windows::core::PCWSTR::from_raw(edit_class.as_ptr()),
-                windows::core::PCWSTR::from_raw(default_wide.as_ptr()),
-                ws(WS_CHILD.0 as i32 | WS_VISIBLE.0 as i32 | WS_BORDER.0 as i32 | ES_AUTOHSCROLL),
-                10,
-                40,
-                340,
-                24,
-                Some(hwnd),
-                Some(hmenu(101)),
-                Some(hinst),
-                None,
-            )
-            .ok();
-
-            let Some(edit) = edit else {
-                return None;
-            };
-
-            let _ = CreateWindowExW(
-                exws(0),
-                windows::core::PCWSTR::from_raw(button_class.as_ptr()),
-                windows::core::PCWSTR::from_raw(
-                    windows::core::HSTRING::from("Cancel").as_ptr() as *const u16,
-                ),
-                ws(WS_CHILD.0 as i32 | WS_VISIBLE.0 as i32 | BS_PUSHBUTTON),
-                260,
-                80,
-                90,
-                28,
-                Some(hwnd),
-                Some(hmenu(1)),
-                Some(hinst),
-                None,
-            );
-
-            let _ = CreateWindowExW(
-                exws(0),
-                windows::core::PCWSTR::from_raw(button_class.as_ptr()),
-                windows::core::PCWSTR::from_raw(
-                    windows::core::HSTRING::from("OK").as_ptr() as *const u16,
-                ),
-                ws(WS_CHILD.0 as i32 | WS_VISIBLE.0 as i32 | BS_DEFPUSHBUTTON),
-                160,
-                80,
-                90,
-                28,
-                Some(hwnd),
-                Some(hmenu(2)),
-                Some(hinst),
-                None,
-            );
-
-            let _ = SetFocus(Some(edit));
-
-            let mut msg = MSG::default();
-            let result = loop {
-                let ret = GetMessageW(&mut msg, None, 0, 0);
-                if !ret.as_bool() {
-                    break None;
-                }
-                if !IsDialogMessageW(hwnd, &msg).as_bool() {
-                    let _ = TranslateMessage(&msg);
-                    DispatchMessageW(&msg);
-                }
-                if msg.message == WM_DESTROY || msg.message == WM_QUIT {
-                    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-                    if ptr != 0 {
-                        break Some(*Box::from_raw(ptr as *mut String));
-                    }
-                    break None;
-                }
-            };
-            result
-        }
-    }
 
     pub fn prompt_and_validate(
         config: Arc<Config>,
@@ -399,6 +197,7 @@ mod platform {
             <actions>
                 <input id="pairingCode" type="text" placeHolderContent="XXXX-XXXX"/>
                 <action content="Pair" arguments="action=pair" inputId="pairingCode"/>
+                <action content="Paste" arguments="action=paste"/>
                 <action content="GUI" arguments="action=gui"/>
                 <action content="Cancel" arguments="action=cancel"/>
             </actions>
@@ -429,12 +228,30 @@ mod platform {
                         if let Ok(arguments) = args.Arguments() {
                             let arguments_str = arguments.to_string();
                             if arguments_str.contains("action=gui") {
-                                let result = windows_input_dialog(
+                                let result = crate::dialogs::input_dialog(
                                     "juicebox-plus Pair Device",
                                     "Enter pairing code (XXXX-XXXX):",
                                     "",
                                 );
                                 *reply_activated.lock().unwrap() = result;
+                                return Ok(());
+                            }
+                            if arguments_str.contains("action=paste") {
+                                match arboard::Clipboard::new().and_then(|mut c| c.get_text()) {
+                                    Ok(text) => {
+                                        let text = text.trim().to_string();
+                                        if text.is_empty() {
+                                            super::notify_all(
+                                                "Clipboard is empty. Copy the pairing code first.",
+                                            );
+                                        } else {
+                                            *reply_activated.lock().unwrap() = Some(text);
+                                        }
+                                    }
+                                    Err(_) => {
+                                        super::notify_all("Could not read the clipboard.");
+                                    }
+                                }
                                 return Ok(());
                             }
                         }
