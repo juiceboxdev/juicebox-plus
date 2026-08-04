@@ -172,7 +172,7 @@ mod platform {
 mod platform {
     use std::sync::{Arc, Mutex};
 
-    use windows::core::{IInspectable, Interface, HSTRING, Ref};
+    use windows::core::{IInspectable, Interface, HSTRING};
     use windows::Data::Xml::Dom::XmlDocument;
     use windows::Foundation::{IPropertyValue, TypedEventHandler};
     use windows::UI::Notifications::{
@@ -180,9 +180,32 @@ mod platform {
         ToastNotificationManager,
     };
     use windows::Win32::Foundation::*;
+    use windows::Win32::Graphics::Gdi::HBRUSH;
+    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
     use windows::Win32::UI::WindowsAndMessaging::*;
 
     use crate::config::Config;
+
+    const COLOR_BTNFACE: i32 = 15;
+    const SS_LEFT: i32 = 0;
+
+    #[inline]
+    fn loword(val: u32) -> u16 {
+        val as u16
+    }
+
+    fn ws(style: i32) -> WINDOW_STYLE {
+        WINDOW_STYLE(style as u32)
+    }
+
+    fn exws(style: i32) -> WINDOW_EX_STYLE {
+        WINDOW_EX_STYLE(style as u32)
+    }
+
+    fn hmenu(id: usize) -> HMENU {
+        HMENU(id as *mut core::ffi::c_void)
+    }
 
     fn windows_input_dialog(title: &str, prompt: &str, default: &str) -> Option<String> {
         unsafe {
@@ -206,23 +229,24 @@ mod platform {
                 unsafe {
                     match msg {
                         WM_COMMAND => {
-                            let id = LOWORD(wparam.0 as u32) as u32;
+                            let id = loword(wparam.0 as u32) as u32;
                             if id == 2 {
-                                let edit = GetDlgItem(hwnd, 101);
-                                let len = SendMessageW(edit, WM_GETTEXTLENGTH, WPARAM(0), LPARAM(0));
+                                let edit = GetDlgItem(Some(hwnd), 101).unwrap_or_default();
+                                let len =
+                                    SendMessageW(edit, WM_GETTEXTLENGTH, Some(WPARAM(0)), Some(LPARAM(0)));
                                 let mut buf = vec![0u16; len.0 as usize + 1];
                                 SendMessageW(
                                     edit,
                                     WM_GETTEXT,
-                                    WPARAM(buf.len() as u64),
-                                    LPARAM(buf.as_mut_ptr() as isize),
+                                    Some(WPARAM(buf.len())),
+                                    Some(LPARAM(buf.as_mut_ptr() as isize)),
                                 );
                                 let text = String::from_utf16_lossy(&buf[..len.0 as usize]);
                                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, Box::into_raw(Box::new(text)) as isize);
-                                DestroyWindow(hwnd);
+                                let _ = DestroyWindow(hwnd);
                             } else if id == 1 {
                                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-                                DestroyWindow(hwnd);
+                                let _ = DestroyWindow(hwnd);
                             }
                         }
                         WM_DESTROY => {
@@ -234,98 +258,109 @@ mod platform {
                 }
             }
 
+            let hinst = HINSTANCE(instance.0);
+
             let wc = WNDCLASSW {
                 style: CS_HREDRAW | CS_VREDRAW,
                 lpfnWndProc: Some(dlg_proc),
-                hInstance: instance,
+                hInstance: hinst,
                 hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
-                hbrBackground: HBRUSH((COLOR_BTNFACE + 1) as isize),
+                hbrBackground: HBRUSH((COLOR_BTNFACE + 1) as *mut core::ffi::c_void),
                 lpszClassName: windows::core::PCWSTR::from_raw(class_name.as_ptr()),
                 ..Default::default()
             };
-            RegisterClassW(&wc);
+            let _ = RegisterClassW(&wc);
 
             let hwnd = CreateWindowExW(
-                WINDOW_EX_STYLE(WS_EX_DLGMODALFRAME),
+                exws(WS_EX_DLGMODALFRAME.0 as i32),
                 windows::core::PCWSTR::from_raw(class_name.as_ptr()),
                 windows::core::PCWSTR::from_raw(title_wide.as_ptr()),
-                WINDOW_STYLE(WS_CAPTION | WS_SYSMENU | WS_VISIBLE),
+                ws(WS_CAPTION.0 as i32 | WS_SYSMENU.0 as i32 | WS_VISIBLE.0 as i32),
                 200,
                 200,
                 380,
                 180,
                 None,
                 None,
-                instance,
+                Some(hinst),
                 None,
-            );
-            if hwnd == HWND(0) {
-                return None;
-            }
+            )
+            .ok();
 
-            CreateWindowExW(
-                WINDOW_EX_STYLE(0),
+            let Some(hwnd) = hwnd else {
+                return None;
+            };
+
+            let _ = CreateWindowExW(
+                exws(0),
                 windows::core::PCWSTR::from_raw(static_class.as_ptr()),
                 windows::core::PCWSTR::from_raw(prompt_wide.as_ptr()),
-                WINDOW_STYLE(WS_CHILD | WS_VISIBLE | SS_LEFT),
+                ws(WS_CHILD.0 as i32 | WS_VISIBLE.0 as i32 | SS_LEFT),
                 10,
                 10,
                 340,
                 20,
-                hwnd,
-                Some(HMENU(3)),
-                instance,
+                Some(hwnd),
+                Some(hmenu(3)),
+                Some(hinst),
                 None,
             );
 
             let edit = CreateWindowExW(
-                WINDOW_EX_STYLE(WS_EX_CLIENTEDGE),
+                exws(WS_EX_CLIENTEDGE.0 as i32),
                 windows::core::PCWSTR::from_raw(edit_class.as_ptr()),
                 windows::core::PCWSTR::from_raw(default_wide.as_ptr()),
-                WINDOW_STYLE(WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL),
+                ws(WS_CHILD.0 as i32 | WS_VISIBLE.0 as i32 | WS_BORDER.0 as i32 | ES_AUTOHSCROLL),
                 10,
                 40,
                 340,
                 24,
-                hwnd,
-                Some(HMENU(101)),
-                instance,
+                Some(hwnd),
+                Some(hmenu(101)),
+                Some(hinst),
                 None,
-            );
+            )
+            .ok();
 
-            CreateWindowExW(
-                WINDOW_EX_STYLE(0),
+            let Some(edit) = edit else {
+                return None;
+            };
+
+            let _ = CreateWindowExW(
+                exws(0),
                 windows::core::PCWSTR::from_raw(button_class.as_ptr()),
-                windows::core::PCWSTR::from_raw(windows::core::HSTRING::from("Cancel").as_ptr() as *const u16),
-                WINDOW_STYLE(WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON),
+                windows::core::PCWSTR::from_raw(
+                    windows::core::HSTRING::from("Cancel").as_ptr() as *const u16,
+                ),
+                ws(WS_CHILD.0 as i32 | WS_VISIBLE.0 as i32 | BS_PUSHBUTTON),
                 260,
                 80,
                 90,
                 28,
-                hwnd,
-                Some(HMENU(1)),
-                instance,
+                Some(hwnd),
+                Some(hmenu(1)),
+                Some(hinst),
                 None,
             );
 
-            CreateWindowExW(
-                WINDOW_EX_STYLE(0),
+            let _ = CreateWindowExW(
+                exws(0),
                 windows::core::PCWSTR::from_raw(button_class.as_ptr()),
                 windows::core::PCWSTR::from_raw(
                     windows::core::HSTRING::from("OK").as_ptr() as *const u16,
                 ),
-                WINDOW_STYLE(WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON),
+                ws(WS_CHILD.0 as i32 | WS_VISIBLE.0 as i32 | BS_DEFPUSHBUTTON),
                 160,
                 80,
                 90,
                 28,
-                hwnd,
-                Some(HMENU(2)),
-                instance,
+                Some(hwnd),
+                Some(hmenu(2)),
+                Some(hinst),
                 None,
             );
 
-            SetFocus(edit);
+            let _ = SetFocus(Some(edit));
 
             let mut msg = MSG::default();
             let result = loop {
@@ -334,7 +369,7 @@ mod platform {
                     break None;
                 }
                 if !IsDialogMessageW(hwnd, &msg).as_bool() {
-                    TranslateMessage(&msg);
+                    let _ = TranslateMessage(&msg);
                     DispatchMessageW(&msg);
                 }
                 if msg.message == WM_DESTROY || msg.message == WM_QUIT {

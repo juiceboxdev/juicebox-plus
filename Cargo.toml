@@ -39,6 +39,9 @@ windows = { version = "0.61", features = [
     "Foundation",
     "Foundation_Collections",
     "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_LibraryLoader",
+    "Win32_Graphics_Gdi",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
