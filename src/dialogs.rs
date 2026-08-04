@@ -293,7 +293,7 @@ mod win32 {
     use windows::Win32::Foundation::*;
     use windows::Win32::Graphics::Gdi::HBRUSH;
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-    use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
     use windows::Win32::UI::WindowsAndMessaging::*;
 
     const COLOR_BTNFACE: i32 = 15;
@@ -333,6 +333,41 @@ mod win32 {
                 Some(LPARAM(buf.as_mut_ptr() as isize)),
             );
             String::from_utf16_lossy(&buf[..len.0 as usize])
+        }
+    }
+
+    fn show_dialog(hwnd: HWND, width: i32, height: i32) {
+        unsafe {
+            let sw = GetSystemMetrics(SM_CXSCREEN);
+            let sh = GetSystemMetrics(SM_CYSCREEN);
+            let x = ((sw - width) / 2).max(0);
+            let y = ((sh - height) / 3).max(0);
+            let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), x, y, width, height, SWP_SHOWWINDOW);
+            let _ = SetForegroundWindow(hwnd);
+            let _ = SetActiveWindow(hwnd);
+        }
+    }
+
+    fn run_dialog(hwnd: HWND, focus: Option<HWND>) -> Option<String> {
+        unsafe {
+            if let Some(f) = focus {
+                let _ = SetFocus(Some(f));
+            }
+            let mut msg = MSG::default();
+            loop {
+                let ret = GetMessageW(&mut msg, None, 0, 0);
+                if !ret.as_bool() {
+                    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+                    if ptr != 0 {
+                        break Some(*Box::from_raw(ptr as *mut String));
+                    }
+                    break None;
+                }
+                if !IsDialogMessageW(hwnd, &msg).as_bool() {
+                    let _ = TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
         }
     }
 
@@ -396,7 +431,7 @@ mod win32 {
                 exws(WS_EX_DLGMODALFRAME.0 as i32),
                 PCWSTR::from_raw(class_name.as_ptr()),
                 PCWSTR::from_raw(title_wide.as_ptr()),
-                ws(WS_CAPTION.0 as i32 | WS_SYSMENU.0 as i32 | WS_VISIBLE.0 as i32),
+                ws(WS_CAPTION.0 as i32 | WS_SYSMENU.0 as i32),
                 200,
                 200,
                 380,
@@ -477,26 +512,8 @@ mod win32 {
                 None,
             );
 
-            let _ = SetFocus(Some(edit));
-
-            let mut msg = MSG::default();
-            loop {
-                let ret = GetMessageW(&mut msg, None, 0, 0);
-                if !ret.as_bool() {
-                    break None;
-                }
-                if !IsDialogMessageW(hwnd, &msg).as_bool() {
-                    let _ = TranslateMessage(&msg);
-                    DispatchMessageW(&msg);
-                }
-                if msg.message == WM_DESTROY || msg.message == WM_QUIT {
-                    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-                    if ptr != 0 {
-                        break Some(*Box::from_raw(ptr as *mut String));
-                    }
-                    break None;
-                }
-            }
+            show_dialog(hwnd, 380, 180);
+            run_dialog(hwnd, Some(edit))
         }
     }
 
@@ -589,7 +606,7 @@ mod win32 {
                 exws(WS_EX_DLGMODALFRAME.0 as i32),
                 PCWSTR::from_raw(class_name.as_ptr()),
                 PCWSTR::from_raw(title_wide.as_ptr()),
-                ws(WS_CAPTION.0 as i32 | WS_SYSMENU.0 as i32 | WS_VISIBLE.0 as i32),
+                ws(WS_CAPTION.0 as i32 | WS_SYSMENU.0 as i32),
                 200,
                 200,
                 400,
@@ -692,26 +709,8 @@ mod win32 {
                 None,
             );
 
-            let _ = SetFocus(Some(combo));
-
-            let mut msg = MSG::default();
-            loop {
-                let ret = GetMessageW(&mut msg, None, 0, 0);
-                if !ret.as_bool() {
-                    break None;
-                }
-                if !IsDialogMessageW(hwnd, &msg).as_bool() {
-                    let _ = TranslateMessage(&msg);
-                    DispatchMessageW(&msg);
-                }
-                if msg.message == WM_DESTROY || msg.message == WM_QUIT {
-                    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-                    if ptr != 0 {
-                        break Some(*Box::from_raw(ptr as *mut String));
-                    }
-                    break None;
-                }
-            }
+            show_dialog(hwnd, 400, 220);
+            run_dialog(hwnd, Some(combo))
         }
     }
 }

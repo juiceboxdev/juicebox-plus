@@ -176,9 +176,9 @@ pub fn create_tray_icon(
     let menu = build_menu(proxy.clone(), config, status);
 
     let tooltip = if paired {
-        "juicebox-plus \u{2014} Paired"
+        "juicebox-plus - Paired"
     } else {
-        "juicebox-plus \u{2014} Not Paired"
+        "juicebox-plus - Not Paired"
     };
 
     TrayIconBuilder::new()

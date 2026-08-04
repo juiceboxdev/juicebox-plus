@@ -175,7 +175,7 @@ impl App {
                 self.device_ws_handle = Some(_handle);
                 if let Some(ref icon) = self.tray_icon {
                     let _ = icon.set_tooltip(Some(&format!(
-                        "juicebox-plus \u{2014} Paired as '{device_name}'"
+                        "juicebox-plus - Paired as '{device_name}'"
                     )));
                 }
                 notify("juicebox-plus", &format!("Connected as '{device_name}'"));
