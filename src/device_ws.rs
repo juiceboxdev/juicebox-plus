@@ -204,10 +204,6 @@ async fn handle_message(
                 .get("filename")
                 .and_then(|v| v.as_str())
                 .unwrap_or("upload");
-            let mime_type = msg
-                .get("mime_type")
-                .and_then(|v| v.as_str())
-                .unwrap_or("application/octet-stream");
             let file_size = msg.get("file_size").and_then(|v| v.as_u64()).unwrap_or(0);
             let ticket = msg.get("ticket").and_then(|v| v.as_str()).unwrap_or("");
             let juicest_url = msg
@@ -246,7 +242,9 @@ async fn handle_message(
                 .and_then(|n| n.to_str())
                 .unwrap_or(filename);
             let filename_owned = real_name.to_string();
-            let mime_type_owned = mime_type.to_string();
+            // Guess the MIME from the actual picked file, not the placeholder
+            // the browser sent in the reserve request.
+            let mime_type_owned = crate::ipc::guess_mime(real_name);
             let ticket_owned = ticket.to_string();
             let juicest_url_owned = juicest_url.to_string();
             let juiceback_url_owned = juiceback_instance.to_string();

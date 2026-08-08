@@ -3,6 +3,7 @@
 mod config;
 mod device_ws;
 mod dialogs;
+mod file_validation;
 mod ipc;
 mod pairing;
 mod progress;

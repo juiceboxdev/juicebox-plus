@@ -325,6 +325,15 @@ pub async fn app_upload(
         }
     }
 
+    // Client-side file type check before we push bytes at the server.
+    if let Err(reason) =
+        client_side_file_check(file_path, &file_name, juicehost_url, &client).await
+    {
+        let user_msg = format!("File blocked: {reason}");
+        progress.finish(&user_msg);
+        return Err(IpcError::ConnectionFailed(user_msg));
+    }
+
     type StreamError = Box<dyn std::error::Error + Send + Sync>;
     const CHUNK_SIZE: usize = 64 * 1024;
     let file = tokio::fs::File::open(file_path)
@@ -452,7 +461,57 @@ pub async fn app_upload_many(
     Ok(urls)
 }
 
-fn guess_mime(filename: &str) -> String {
+/// Read up to 512 bytes from a file to use for magic-byte sniffing.
+async fn read_file_prefix(file_path: &str) -> std::io::Result<Vec<u8>> {
+    use tokio::io::AsyncReadExt;
+    let mut file = tokio::fs::File::open(file_path).await?;
+    let mut buf = vec![0u8; 512];
+    let n = file.read(&mut buf).await?;
+    buf.truncate(n);
+    Ok(buf)
+}
+
+/// Client-side pre-flight check: fetch the juicehost config, then reject
+/// dangerous files locally before we waste bandwidth uploading them.
+async fn client_side_file_check(
+    file_path: &str,
+    filename: &str,
+    juicehost_url: &str,
+    client: &reqwest::Client,
+) -> Result<(), String> {
+    let config_url = format!("{}/api/config", juicehost_url.trim_end_matches('/'));
+    let level = match client.get(&config_url).send().await {
+        Ok(resp) => match resp.json::<serde_json::Value>().await {
+            Ok(cfg) => cfg
+                .get("danger_level")
+                .and_then(|v| v.as_str())
+                .map(crate::file_validation::ProtectionLevel::from_str)
+                .unwrap_or(crate::file_validation::ProtectionLevel::High),
+            Err(_) => crate::file_validation::ProtectionLevel::High,
+        },
+        Err(_) => return Ok(()), // server unreachable; let the upload fail naturally
+    };
+
+    if level == crate::file_validation::ProtectionLevel::None {
+        return Ok(());
+    }
+
+    let prefix = match read_file_prefix(file_path).await {
+        Ok(p) => p,
+        Err(_) => return Ok(()), // can't read it; server will do its own check anyway
+    };
+
+    match crate::file_validation::validate_file(filename, &prefix, level) {
+        crate::file_validation::FileValidation::Allowed => Ok(()),
+        crate::file_validation::FileValidation::BlockedExtension { tier, .. }
+        | crate::file_validation::FileValidation::BlockedMagic { tier, .. } => Err(
+            crate::file_validation::friendly_block_reason(tier),
+        ),
+        crate::file_validation::FileValidation::Empty => Err("Empty files are not allowed".into()),
+    }
+}
+
+pub(crate) fn guess_mime(filename: &str) -> String {
     let ext = std::path::Path::new(filename)
         .extension()
         .and_then(|e| e.to_str())
@@ -541,6 +600,15 @@ pub async fn ultrafast_upload(
     }
 
     tracing::info!("Uploading to juicehost: {url} ({total_bytes} bytes)");
+
+    // Client-side file type check before we push bytes at the server.
+    if let Err(reason) =
+        client_side_file_check(file_path, display_name, juicehost_url, &client).await
+    {
+        let user_msg = format!("File blocked: {reason}");
+        progress.finish(&user_msg);
+        return Err(IpcError::ConnectionFailed(user_msg));
+    }
 
     // Build a streaming body that reads the file in chunks and reports progress.
     type StreamError = Box<dyn std::error::Error + Send + Sync>;
