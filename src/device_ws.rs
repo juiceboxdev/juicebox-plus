@@ -337,7 +337,7 @@ async fn check_device_paired(instance: &str, token: &str) -> Option<bool> {
     }
 }
 
-fn build_ws_url(instance: &str, token: &str) -> String {
+pub(crate) fn build_ws_url(instance: &str, token: &str) -> String {
     let base = instance.trim_end_matches('/');
     let base = if base.starts_with("https") {
         base.replacen("https", "wss", 1)

@@ -1,9 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod config;
+mod connection_test;
 mod device_ws;
 mod dialogs;
 mod file_validation;
+mod firewall;
 mod ipc;
 mod pairing;
 mod progress;
@@ -54,6 +56,8 @@ fn register_aumid() {}
 
 fn main() {
     register_aumid();
+    #[cfg(target_os = "windows")]
+    firewall::ensure_rule();
     let config = config::Config::load();
     let log_level = config.log_level.clone();
     let config = Arc::new(Mutex::new(config));

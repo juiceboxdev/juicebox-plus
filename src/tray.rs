@@ -5,7 +5,7 @@ use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuIt
 use tray_icon::{Icon, TrayIconBuilder};
 
 use crate::config::Config;
-use crate::state::{DaemonStatus, TrayAction, SETTING_LABELS};
+use crate::state::{TrayAction, SETTING_LABELS};
 
 const COMPRESSION_MODES: &[(&str, &str)] =
     &[("auto", "Auto"), ("lz4", "LZ4"), ("disabled", "Disabled")];
@@ -26,11 +26,7 @@ fn load_icon() -> Icon {
     Icon::from_rgba(rgba.into_raw(), w, h).expect("Failed to create tray icon")
 }
 
-pub fn build_menu(
-    proxy: EventLoopProxy<TrayAction>,
-    config: &Arc<Mutex<Config>>,
-    status: &DaemonStatus,
-) -> Menu {
+pub fn build_menu(proxy: EventLoopProxy<TrayAction>, config: &Arc<Mutex<Config>>) -> Menu {
     let cfg = config.lock().unwrap();
     let use_tls = cfg.use_tls;
     let fec_enabled = cfg.fec_enabled;
@@ -47,12 +43,8 @@ pub fn build_menu(
     menu.append(&version_item).unwrap();
     menu.append(&PredefinedMenuItem::separator()).unwrap();
 
-    let pause_label = match status {
-        DaemonStatus::Paused { .. } => "Resume",
-        _ => "Pause",
-    };
-    let pause_item = MenuItem::new(pause_label, true, None);
     let status_item = MenuItem::new("Status", true, None);
+    let test_item = MenuItem::new("Test Connection...", true, None);
     let upload_item = MenuItem::new("Upload File...", true, None);
     let paste_item = MenuItem::new("Upload Paste...", true, None);
 
@@ -105,8 +97,8 @@ pub fn build_menu(
     settings_menu.append(&compression_menu).unwrap();
     settings_menu.append(&log_level_menu).unwrap();
 
-    let pause_id = pause_item.id().clone();
     let status_id = status_item.id().clone();
+    let test_id = test_item.id().clone();
     let upload_id = upload_item.id().clone();
     let paste_id = paste_item.id().clone();
     let pair_id = pair_item.id().clone();
@@ -114,8 +106,8 @@ pub fn build_menu(
     let tls_id = tls_item.id().clone();
     let fec_id = fec_item.id().clone();
 
-    menu.append(&pause_item).unwrap();
     menu.append(&status_item).unwrap();
+    menu.append(&test_item).unwrap();
     menu.append(&PredefinedMenuItem::separator()).unwrap();
     menu.append(&upload_item).unwrap();
     menu.append(&paste_item).unwrap();
@@ -134,11 +126,12 @@ pub fn build_menu(
     let p7 = proxy.clone();
     let p8 = proxy.clone();
     let p9 = proxy.clone();
+    let p10 = proxy.clone();
     MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
-        if event.id == pause_id {
-            let _ = p1.send_event(TrayAction::PauseResume);
-        } else if event.id == status_id {
+        if event.id == status_id {
             let _ = p2.send_event(TrayAction::ShowStatus);
+        } else if event.id == test_id {
+            let _ = p10.send_event(TrayAction::TestConnection);
         } else if event.id == upload_id {
             let _ = p3.send_event(TrayAction::UploadFile);
         } else if event.id == paste_id {
@@ -166,14 +159,13 @@ pub fn build_menu(
 pub fn create_tray_icon(
     proxy: EventLoopProxy<TrayAction>,
     config: &Arc<Mutex<Config>>,
-    status: &DaemonStatus,
 ) -> tray_icon::TrayIcon {
     let icon = load_icon();
     let cfg = config.lock().unwrap();
     let paired = cfg.paired;
     drop(cfg);
 
-    let menu = build_menu(proxy.clone(), config, status);
+    let menu = build_menu(proxy.clone(), config);
 
     let tooltip = if paired {
         "juicebox-plus - Paired"

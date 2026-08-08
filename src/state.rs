@@ -29,17 +29,14 @@ pub enum DaemonStatus {
         bytes_completed: u64,
         total_bytes: u64,
     },
-    Paused {
-        job_id: String,
-    },
 }
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum TrayAction {
     IncomingFile(String),
-    PauseResume,
     ShowStatus,
+    TestConnection,
     PairDevice,
     PairingComplete(String),
     ToggleTls,
@@ -75,8 +72,7 @@ impl App {
 
     pub fn build_tray(&mut self, _event_loop: &EventLoopWindowTarget<TrayAction>) {
         let proxy = self.proxy.clone();
-        let status = self.status.clone();
-        self.tray_icon = Some(tray::create_tray_icon(proxy, &self.config, &status));
+        self.tray_icon = Some(tray::create_tray_icon(proxy, &self.config));
         tracing::info!("System tray icon created");
     }
 
@@ -116,23 +112,6 @@ impl App {
                     });
                 });
             }
-            TrayAction::PauseResume => {
-                tracing::info!("Pause/Resume toggled");
-                if let DaemonStatus::Uploading { ref job_id, .. } = self.status {
-                    let job_id = job_id.clone();
-                    self.status = DaemonStatus::Paused { job_id };
-                    notify("juicebox-plus", "Upload paused");
-                } else if let DaemonStatus::Paused { ref job_id } = self.status {
-                    let job_id = job_id.clone();
-                    self.status = DaemonStatus::Uploading {
-                        job_id,
-                        bytes_completed: 0,
-                        total_bytes: 0,
-                    };
-                    notify("juicebox-plus", "Upload resumed");
-                }
-                self.rebuild_tray();
-            }
             TrayAction::ShowStatus => {
                 let msg = match &self.status {
                     DaemonStatus::Disconnected => "Daemon: Disconnected".to_string(),
@@ -150,12 +129,38 @@ impl App {
                         };
                         format!("Uploading {job_id}: {pct}%")
                     }
-                    DaemonStatus::Paused { job_id } => {
-                        format!("Paused: {job_id}")
-                    }
                 };
 
                 notify("juicebox-plus", &msg);
+            }
+            TrayAction::TestConnection => {
+                tracing::info!("Connection test requested");
+                let config = Arc::clone(&self.config);
+                std::thread::spawn(move || {
+                    let rt = match tokio::runtime::Runtime::new() {
+                        Ok(rt) => rt,
+                        Err(e) => {
+                            tracing::error!("Failed to create tokio runtime: {e}");
+                            return;
+                        }
+                    };
+                    rt.block_on(async {
+                        let cfg = config.lock().unwrap().clone();
+                        let results = crate::connection_test::run_all(&cfg).await;
+                        for r in &results {
+                            let status = if r.ok { "OK" } else { "FAIL" };
+                            tracing::info!(
+                                "[{}] {} ({:?}) {}",
+                                status,
+                                r.name,
+                                r.latency_ms,
+                                r.detail
+                            );
+                        }
+                        let summary = crate::connection_test::format_results(&results);
+                        notify("juicebox-plus - Connection Test", &summary);
+                    });
+                });
             }
             TrayAction::PairDevice => {
                 tracing::info!("Pair device requested");
@@ -410,7 +415,17 @@ impl App {
                             }
                             Err(e) => {
                                 tracing::error!("Upload failed: {e}");
-                                notify("juicebox-plus", &format!("Upload failed: {e}"));
+                                let network = matches!(
+                                    &e,
+                                    crate::ipc::IpcError::ConnectionFailed(_)
+                                        | crate::ipc::IpcError::ConnectionClosed
+                                );
+                                let mut msg = format!("Upload failed: {e}");
+                                if let Some(hint) = crate::firewall::transfer_block_hint(network) {
+                                    msg.push('\n');
+                                    msg.push_str(&hint);
+                                }
+                                notify("juicebox-plus", &msg);
                             }
                         }
                     });
@@ -506,7 +521,17 @@ impl App {
                             }
                             Err(e) => {
                                 tracing::error!("Upload failed: {e}");
-                                notify("juicebox-plus", &format!("Upload failed: {e}"));
+                                let network = matches!(
+                                    &e,
+                                    crate::ipc::IpcError::ConnectionFailed(_)
+                                        | crate::ipc::IpcError::ConnectionClosed
+                                );
+                                let mut msg = format!("Upload failed: {e}");
+                                if let Some(hint) = crate::firewall::transfer_block_hint(network) {
+                                    msg.push('\n');
+                                    msg.push_str(&hint);
+                                }
+                                notify("juicebox-plus", &msg);
                             }
                         }
                     });
@@ -549,8 +574,7 @@ impl App {
     fn rebuild_tray(&mut self) {
         let proxy = self.proxy.clone();
         let config = Arc::clone(&self.config);
-        let status = self.status.clone();
-        let menu = tray::build_menu(proxy, &config, &status);
+        let menu = tray::build_menu(proxy, &config);
         if let Some(ref icon) = self.tray_icon {
             icon.set_menu(Some(Box::new(menu)));
         }

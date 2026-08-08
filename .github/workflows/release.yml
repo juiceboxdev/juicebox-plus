@@ -22,7 +22,7 @@ jobs:
 
       - name: Install system deps (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libayatana-appindicator3-dev libdbus-1-dev libxdo-dev
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libayatana-appindicator3-dev libdbus-1-dev libxdo-dev patchelf
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -34,6 +34,16 @@ jobs:
         if: runner.os == 'Linux'
         run: mv target/release/juicebox-plus target/release/juicebox-plus-linux
 
+      - name: Bundle libxdo for portability (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          LIBXDO=$(ldd target/release/juicebox-plus-linux | awk '/libxdo\.so/{print $3; exit}')
+          cp "$LIBXDO" target/release/
+          patchelf --set-rpath '$ORIGIN' target/release/juicebox-plus-linux
+          cd target/release
+          tar -czf juicebox-plus-linux.tar.gz juicebox-plus-linux "$(basename "$LIBXDO")"
+          sha256sum juicebox-plus-linux.tar.gz > juicebox-plus-linux.tar.gz.sha256
+
       - name: Rename binary (macOS)
         if: runner.os == 'macOS'
         run: mv target/release/juicebox-plus target/release/juicebox-plus-macos
@@ -42,12 +52,19 @@ jobs:
         if: runner.os == 'Windows'
         run: mv target/release/juicebox-plus.exe target/release/juicebox-plus-windows.exe
 
-      - name: Upload artifact (Unix)
-        if: runner.os != 'Windows'
+      - name: Upload artifact (Linux)
+        if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: juicebox-plus-${{ matrix.os }}
-          path: target/release/juicebox-plus-${{ runner.os == 'Linux' && 'linux' || 'macos' }}
+          name: juicebox-plus-linux
+          path: target/release/juicebox-plus-linux.tar.gz*
+
+      - name: Upload artifact (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: juicebox-plus-macos
+          path: target/release/juicebox-plus-macos
 
       - name: Upload artifact (Windows)
         if: runner.os == 'Windows'
